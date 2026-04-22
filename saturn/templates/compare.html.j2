@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>saturn compare — {{ report.a.label }} vs {{ report.b.label }}</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root { --bg:#ffffff; --fg:#14161a; --muted:#5b6472; --panel:#f7f7f9; --accent-a:#2d5cf6; --accent-b:#8b5cf6; --warn:#b45309; --error:#b91c1c; --ok:#047857; --positive:#047857; --negative:#b91c1c; }
+  html, body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif; margin: 0; line-height: 1.5; }
+  main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header h1 { margin: 0 0 .25rem 0; font-size: 1.9rem; letter-spacing: -.01em; }
+  header p { color: var(--muted); margin: 0; }
+  .chip { display: inline-block; background: var(--panel); border-radius: 999px; padding: .15rem .6rem; margin-right: .35rem; font-size: .8rem; color: var(--muted); }
+  .chip.a { background: #e0e7ff; color: #1e3a8a; }
+  .chip.b { background: #ede9fe; color: #4c1d95; }
+  .toc { display: flex; flex-wrap: wrap; gap: .35rem .6rem; padding: .75rem 1rem; background: var(--panel); border-radius: 8px; margin: 1.25rem 0 2rem; font-size: .9rem; }
+  .toc a { color: var(--accent-a); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  section { margin: 2rem 0; }
+  section h2 { margin-bottom: .25rem; font-size: 1.25rem; letter-spacing: -.01em; }
+  section h3 { margin-top: 1.5rem; margin-bottom: .25rem; font-size: 1.05rem; }
+  .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem; margin: .75rem 0; background: #fff; }
+  .side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: .5rem 0; }
+  .side { background: var(--panel); padding: .6rem .8rem; border-radius: 6px; }
+  .side .label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .2rem; }
+  .side .label.a { color: #1e3a8a; }
+  .side .label.b { color: #4c1d95; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .4rem .5rem; }
+  .stat { display: flex; justify-content: space-between; background: white; padding: .25rem .5rem; border-radius: 4px; font-size: .82rem; }
+  .stat .key { color: var(--muted); }
+  .stat .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .delta { background: #fff7ed; padding: .5rem .8rem; border-radius: 6px; margin: .5rem 0; font-size: .88rem; }
+  .delta-row { display: grid; grid-template-columns: 160px 80px 80px 80px 1fr; gap: .6rem; padding: .15rem 0; font-variant-numeric: tabular-nums; font-size: .82rem; border-bottom: 1px dashed #f0f0f0; }
+  .delta-row .key { color: var(--muted); }
+  .delta-row .a-val { color: #1e3a8a; text-align: right; }
+  .delta-row .b-val { color: #4c1d95; text-align: right; }
+  .delta-row .d { text-align: right; }
+  .delta-row .d.positive { color: var(--positive); }
+  .delta-row .d.negative { color: var(--negative); }
+  .alerts { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 .75rem; }
+  .alert { font-size: .78rem; padding: .15rem .5rem; border-radius: 999px; }
+  .alert.info { background: #e0e7ff; color: #3730a3; }
+  .alert.warn { background: #fef3c7; color: var(--warn); }
+  .alert.error { background: #fee2e2; color: var(--error); }
+  .muted { color: var(--muted); font-size: .9rem; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+  .pill-a { display: inline-block; background: var(--accent-a); color: white; font-weight: 600; padding: .05rem .45rem; border-radius: 4px; font-size: .8rem; }
+  .pill-b { display: inline-block; background: var(--accent-b); color: white; font-weight: 600; padding: .05rem .45rem; border-radius: 4px; font-size: .8rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>saturn <span class="muted">compare</span></h1>
+    <p>
+      <span class="pill-a">{{ report.a.label }}</span>
+      <span class="muted">vs</span>
+      <span class="pill-b">{{ report.b.label }}</span>
+    </p>
+    <p style="margin-top:.5rem;">
+      <span class="chip a">{{ report.a.source }}</span>
+      <span class="chip a">{{ report.a.row_count | num }} rows</span>
+      <span class="chip b">{{ report.b.source }}</span>
+      <span class="chip b">{{ report.b.row_count | num }} rows</span>
+      <span class="chip">{{ report.generated_at }}</span>
+    </p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    {% for col in report.columns %}
+      <a href="#col-{{ loop.index }}">{{ col.column }}</a>
+    {% endfor %}
+  </nav>
+
+  {% for col in report.columns %}
+  <section id="col-{{ loop.index }}">
+    <h2>{{ col.column }} <span class="chip">{{ col.kind }}</span></h2>
+    <div class="card">
+      {% if col.notes %}
+        <div class="alerts">
+          {% for note in col.notes %}
+            <span class="alert warn">{{ note }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if col.a and col.b %}
+        <div class="side-by-side">
+          <div class="side">
+            <div class="label a">{{ report.a.label }}</div>
+            <div class="muted">{{ col.a.n | num }} rows · {{ col.a.null_rate | pct }} null
+              {% if col.a.n_unique is not none %} · {{ col.a.n_unique | num }} unique{% endif %}
+            </div>
+            <div class="alerts">
+              {% for a in col.a.alerts %}
+                <span class="alert {{ a.level }}">{{ a.message }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="side">
+            <div class="label b">{{ report.b.label }}</div>
+            <div class="muted">{{ col.b.n | num }} rows · {{ col.b.null_rate | pct }} null
+              {% if col.b.n_unique is not none %} · {{ col.b.n_unique | num }} unique{% endif %}
+            </div>
+            <div class="alerts">
+              {% for a in col.b.alerts %}
+                <span class="alert {{ a.level }}">{{ a.message }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        {% if col.delta %}
+          <div class="delta">
+            <div class="muted" style="margin-bottom:.25rem;">Δ = {{ report.b.label }} − {{ report.a.label }}</div>
+            <div class="delta-row" style="font-weight:600;border-bottom:1px solid #d4d4d8;">
+              <div class="key">metric</div>
+              <div class="a-val">{{ report.a.label }}</div>
+              <div class="b-val">{{ report.b.label }}</div>
+              <div class="d">Δ</div>
+              <div></div>
+            </div>
+            {% for key, a_val, b_val, d_val, note in col.delta | delta_rows %}
+              <div class="delta-row">
+                <div class="key">{{ key }}</div>
+                <div class="a-val">{{ a_val | num }}</div>
+                <div class="b-val">{{ b_val | num }}</div>
+                <div class="d {{ 'positive' if (d_val or 0) > 0 else 'negative' if (d_val or 0) < 0 else '' }}">
+                  {% if d_val is not none %}{{ d_val | signed }}{% endif %}
+                </div>
+                <div class="muted">{{ note or "" }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if charts.get(col.column) %}
+          <div style="margin-top:.75rem;">
+            {{ charts[col.column] | safe }}
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <footer>
+    Saturn v{{ version }} · compare mode · {{ report.a.label }} ({{ report.a.row_count | num }}) vs {{ report.b.label }} ({{ report.b.row_count | num }}).
+  </footer>
+</main>
+</body>
+</html>

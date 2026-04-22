@@ -111,16 +111,7 @@ def assemble(
 
 
 def render_html(data: ReportData, output_path: Path) -> Path:
-    template_dir = Path(__file__).parent / "templates"
-    env = Environment(
-        loader=FileSystemLoader(template_dir),
-        autoescape=select_autoescape(["html", "xml"]),
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    env.filters["pct"] = lambda v: f"{(v or 0):.1%}"
-    env.filters["num"] = _fmt_num
-
+    env = _jinja()
     tmpl = env.get_template("report.html.j2")
     charts: dict[str, str | None] = {r.column: chart_for(r) for r in data.results}
 
@@ -133,9 +124,155 @@ def render_html(data: ReportData, output_path: Path) -> Path:
     return output_path
 
 
-def write_findings(data: ReportData, output_path: Path) -> Path:
-    output_path.write_text(json.dumps(data.to_findings(), indent=2, default=_json_default), encoding="utf-8")
+def render_compare_html(report, output_path: Path) -> Path:
+    """Render a compare report (from saturn.compare.CompareReport)."""
+    from .charts import overlay_histogram
+
+    env = _jinja()
+    tmpl = env.get_template("compare.html.j2")
+
+    # per-column overlay chart where both sides have histograms
+    charts: dict[str, str] = {}
+    for c in report.columns:
+        if c.a is None or c.b is None:
+            continue
+        if c.kind == "numeric":
+            ha = c.a.extras.get("histogram")
+            hb = c.b.extras.get("histogram")
+            if ha and hb:
+                fig = overlay_histogram(ha, hb, c.column, report.a.label, report.b.label)
+                if fig:
+                    charts[c.column] = fig
+        elif c.kind == "text":
+            ha = c.a.extras.get("length_histogram")
+            hb = c.b.extras.get("length_histogram")
+            if ha and hb:
+                fig = overlay_histogram(ha, hb, f"{c.column} length", report.a.label, report.b.label)
+                if fig:
+                    charts[c.column] = fig
+
+    html = tmpl.render(report=report, charts=charts, version=__version__)
+    output_path.write_text(html, encoding="utf-8")
     return output_path
+
+
+def write_findings(data: ReportData, output_path: Path) -> Path:
+    output_path.write_text(
+        json.dumps(data.to_findings(), indent=2, default=_json_default), encoding="utf-8"
+    )
+    return output_path
+
+
+def write_compare_findings(report, output_path: Path) -> Path:
+    payload = {"saturn_version": __version__, **report.to_dict()}
+    output_path.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
+    return output_path
+
+
+def _jinja() -> Environment:
+    template_dir = Path(__file__).parent / "templates"
+    env = Environment(
+        loader=FileSystemLoader(template_dir),
+        autoescape=select_autoescape(["html", "xml"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    env.filters["pct"] = lambda v: f"{(v or 0):.1%}"
+    env.filters["num"] = _fmt_num
+    env.filters["signed"] = _fmt_signed
+    env.filters["delta_rows"] = _delta_rows
+    return env
+
+
+def _fmt_signed(v: Any) -> str:
+    if v is None:
+        return "—"
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if abs(f) >= 1000:
+        return f"{f:+,.0f}"
+    if abs(f) < 0.001 and f != 0:
+        return f"{f:+.2e}"
+    return f"{f:+,.3f}"
+
+
+# order metrics are shown in the compare delta table, per kind
+_NUMERIC_DELTA_KEYS = [
+    ("n_unique", "distinct"),
+    ("mean", "mean"),
+    ("median", "median"),
+    ("std", "std"),
+    ("q1", "q1"),
+    ("q3", "q3"),
+    ("min", "min"),
+    ("max", "max"),
+    ("outlier_rate", "outlier rate"),
+    ("skew", "skew"),
+    ("null_rate", "null rate"),
+]
+_TEXT_DELTA_KEYS = [
+    ("n_unique", "distinct"),
+    ("len_mean", "mean length"),
+    ("len_median", "median length"),
+    ("len_p95", "p95 length"),
+    ("word_mean", "mean words"),
+    ("duplicate_rate", "duplicate rate"),
+    ("vocab_size", "vocab size (top-K)"),
+    ("null_rate", "null rate"),
+]
+_CATEGORICAL_DELTA_KEYS = [
+    ("n_unique", "distinct"),
+    ("entropy", "entropy"),
+    ("null_rate", "null rate"),
+]
+
+
+def _delta_rows(delta: dict[str, Any]):
+    """Jinja filter: yield (display_key, a_val, b_val, delta, note) tuples."""
+    # infer kind by which a/b keys exist
+    keys: list[tuple[str, str]]
+    if "len_mean_a" in delta:
+        keys = _TEXT_DELTA_KEYS
+    elif "entropy_a" in delta and "mean_a" not in delta:
+        keys = _CATEGORICAL_DELTA_KEYS
+    elif "mean_a" in delta:
+        keys = _NUMERIC_DELTA_KEYS
+    else:
+        keys = []
+
+    for raw, pretty in keys:
+        a_val = delta.get(f"{raw}_a")
+        b_val = delta.get(f"{raw}_b")
+        d_val = delta.get(f"{raw}_delta")
+        if a_val is None and b_val is None:
+            continue
+        yield pretty, a_val, b_val, d_val, None
+
+    for extra_key, note in (
+        ("top_value_jaccard", "top-value overlap"),
+        ("top_word_jaccard", "top-word overlap"),
+        ("language_jaccard", "language overlap"),
+    ):
+        if extra_key in delta:
+            yield note, None, None, delta[extra_key], "jaccard"
+    if delta.get("languages_only_a"):
+        yield (
+            "languages only in a",
+            None,
+            None,
+            None,
+            ", ".join(delta["languages_only_a"]),
+        )
+    if delta.get("languages_only_b"):
+        yield (
+            "languages only in b",
+            None,
+            None,
+            None,
+            ", ".join(delta["languages_only_b"]),
+        )
 
 
 def _fmt_num(v: Any) -> str:

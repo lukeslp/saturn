@@ -10,9 +10,16 @@ from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__
+from .compare import compare_dataframes, split_dataframe
 from .ingestion import adapter_for, reservoir_sample
 from .profilers import profile_columns, profile_dataframe
-from .report import assemble, render_html, write_findings
+from .report import (
+    assemble,
+    render_compare_html,
+    render_html,
+    write_compare_findings,
+    write_findings,
+)
 
 app = typer.Typer(
     name="saturn",
@@ -225,6 +232,134 @@ def huggingface(
             findings=findings,
             open_browser=open_browser,
         )
+
+
+@app.command(
+    name="compare",
+    help="Compare two datasets (or two slices of one) column-by-column.",
+)
+def compare(
+    source_a: str = typer.Argument(..., help="First source (HF repo id or file path)"),
+    source_b: str | None = typer.Argument(
+        None,
+        help="Second source. Omit + pass --by COL to split source_a by column value.",
+    ),
+    by: str | None = typer.Option(
+        None,
+        "--by",
+        help="When source_b is omitted, split source_a by this column's two most frequent values",
+    ),
+    values: str | None = typer.Option(
+        None,
+        "--values",
+        help="Comma-separated values for --by (default: top two by frequency)",
+    ),
+    label_a: str | None = typer.Option(None, "--label-a"),
+    label_b: str | None = typer.Option(None, "--label-b"),
+    out: Path = typer.Option(Path("saturn_compare.html"), "--out"),
+    findings: Path = typer.Option(Path("saturn_compare.json"), "--findings"),
+    seed: int = typer.Option(42, "--seed"),
+    split_a: str | None = typer.Option(None, "--split-a", help="HF split for source_a"),
+    split_b: str | None = typer.Option(None, "--split-b", help="HF split for source_b"),
+    open_browser: bool = typer.Option(False, "--open"),
+) -> None:
+    console.print(Panel(f"[bold]saturn compare[/bold] v{__version__}", border_style="magenta"))
+
+    if source_b is None and by is None:
+        raise typer.BadParameter("pass either a second source or --by COLUMN")
+
+    adapter_a = adapter_for(source_a, split=split_a)
+    console.print(f"[dim]A:[/] {type(adapter_a).__name__}  [dim]→[/] {adapter_a.source}")
+    with console.status("loading A", spinner="dots"):
+        df_a = adapter_a.load_dataframe()
+    console.print(f"[dim]A loaded:[/] {df_a.height:,} rows × {df_a.width} cols")
+
+    if source_b is None:
+        # split the single source by --by COL
+        wanted = [v.strip() for v in values.split(",")] if values else None
+        partitions = split_dataframe(df_a, by, wanted)
+        if len(partitions) < 2:
+            raise typer.BadParameter(
+                f"column {by!r} needs at least two distinct values to compare"
+            )
+        (la, df_left), (lb, df_right) = partitions[0], partitions[1]
+        if label_a is None:
+            label_a = str(la)
+        if label_b is None:
+            label_b = str(lb)
+        df_a, df_b = df_left, df_right
+        source_b_resolved = f"{adapter_a.source}[{by}={lb}]"
+        source_a_resolved = f"{adapter_a.source}[{by}={la}]"
+    else:
+        adapter_b = adapter_for(source_b, split=split_b)
+        console.print(f"[dim]B:[/] {type(adapter_b).__name__}  [dim]→[/] {adapter_b.source}")
+        with console.status("loading B", spinner="dots"):
+            df_b = adapter_b.load_dataframe()
+        console.print(f"[dim]B loaded:[/] {df_b.height:,} rows × {df_b.width} cols")
+        source_a_resolved = adapter_a.source
+        source_b_resolved = adapter_b.source
+        if label_a is None:
+            label_a = "A"
+        if label_b is None:
+            label_b = "B"
+
+    with console.status("profiling + diffing columns", spinner="dots"):
+        report = compare_dataframes(
+            df_a,
+            df_b,
+            label_a=label_a,
+            label_b=label_b,
+            source_a=source_a_resolved,
+            source_b=source_b_resolved,
+            seed=seed,
+        )
+
+    _print_compare_summary(report)
+
+    out_path = render_compare_html(report, out)
+    findings_path = write_compare_findings(report, findings)
+    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
+    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
+
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out_path.as_uri())
+
+
+def _print_compare_summary(report) -> None:
+    table = Table(
+        title=f"{report.a.label} ({report.a.row_count:,}) vs {report.b.label} ({report.b.row_count:,})",
+        show_lines=False,
+    )
+    table.add_column("column", style="bold")
+    table.add_column("kind", style="cyan")
+    table.add_column(report.a.label, justify="right", style="blue")
+    table.add_column(report.b.label, justify="right", style="magenta")
+    table.add_column("notable Δ", justify="left")
+
+    for c in report.columns:
+        a_label = f"{c.a.n_unique:,}u" if c.a and c.a.n_unique is not None else "-"
+        b_label = f"{c.b.n_unique:,}u" if c.b and c.b.n_unique is not None else "-"
+        notable: list[str] = []
+        if c.delta.get("null_rate_delta"):
+            d = c.delta["null_rate_delta"]
+            if abs(d) > 0.05:
+                notable.append(f"null {d:+.1%}")
+        if c.delta.get("len_mean_delta"):
+            d = c.delta["len_mean_delta"]
+            if abs(d) > 10:
+                notable.append(f"len_mean {d:+.0f}")
+        if c.delta.get("mean_delta"):
+            d = c.delta["mean_delta"]
+            if abs(d) > 0.1 * abs(c.delta.get("mean_a") or 1):
+                notable.append(f"mean {d:+.2f}")
+        if c.delta.get("language_jaccard") is not None and c.delta["language_jaccard"] < 0.7:
+            notable.append(f"lang-jaccard {c.delta['language_jaccard']:.2f}")
+        if c.delta.get("top_value_jaccard") is not None and c.delta["top_value_jaccard"] < 0.5:
+            notable.append(f"top-val-jaccard {c.delta['top_value_jaccard']:.2f}")
+        table.add_row(c.column, c.kind, a_label, b_label, ", ".join(notable) or "[dim]—[/]")
+    console.print(table)
 
 
 @app.command(name="version")

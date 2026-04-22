@@ -369,28 +369,32 @@ def _profile_categorical_series(column: str, s: "pl.Series") -> ProfileResult:
     return result
 
 
-def _detect_languages(sample: "pl.Series") -> dict[str, int]:
-    """Sample-based language detection. fasttext first, langdetect fallback."""
-    strings = [s for s in sample.drop_nulls().to_list() if isinstance(s, str) and 8 <= len(s) <= 400]
-    if not strings:
+_LANG_RESULT_META_KEY = "_engine"
+
+
+def _detect_languages(column: "pl.Series") -> dict[str, int]:
+    """Language detection. Uses fasttext on the full column when available
+    (fast enough for 400K rows), falls back to a bounded langdetect sample."""
+    import polars as pl
+
+    clean = column.drop_nulls().cast(pl.Utf8, strict=False).drop_nulls()
+    if clean.len() == 0:
         return {}
 
-    # fasttext is fast but optional — 50MB model + extra dep
-    try:
-        import fasttext  # type: ignore
+    model_path = _ensure_fasttext_lid()
+    if model_path:
+        try:
+            return _fasttext_detect(clean, model_path)
+        except Exception:
+            pass  # fall through to langdetect
 
-        model_path = _ensure_fasttext_lid()
-        if model_path:
-            model = fasttext.load_model(model_path)
-            labels, _ = model.predict(strings, k=1)
-            counter: Counter[str] = Counter()
-            for row in labels:
-                if row:
-                    counter[row[0].replace("__label__", "")] += 1
-            return dict(counter.most_common(30))
-    except ImportError:
-        pass
-
+    # langdetect fallback: only cheap on a sample
+    sample = clean.sample(n=min(clean.len(), _LANG_SAMPLE_K), seed=42) if clean.len() > _LANG_SAMPLE_K else clean
+    strings = [
+        s for s in sample.to_list() if isinstance(s, str) and 8 <= len(s) <= 400
+    ]
+    if not strings:
+        return {}
     try:
         import langdetect  # type: ignore
 
@@ -404,25 +408,68 @@ def _detect_languages(sample: "pl.Series") -> dict[str, int]:
             counter[langdetect.detect(s)] += 1
         except Exception:
             counter["unknown"] += 1
-    return dict(counter.most_common(30))
+    counts = dict(counter.most_common(30))
+    counts["__engine"] = "langdetect_sample"
+    return counts
+
+
+def _fasttext_detect(column: "pl.Series", model_path: str) -> dict[str, int]:
+    """Run fasttext lid.176 on every eligible row."""
+    import os
+    import sys
+
+    import fasttext  # type: ignore
+
+    # silence stderr noise from fasttext model load
+    devnull = open(os.devnull, "w")
+    _orig_stderr = sys.stderr
+    try:
+        sys.stderr = devnull
+        model = fasttext.load_model(model_path)
+    finally:
+        sys.stderr = _orig_stderr
+        devnull.close()
+
+    # fasttext refuses newlines inside a doc; strip + truncate per row, then batch
+    strings = column.to_list()
+    cleaned: list[str] = []
+    for raw in strings:
+        if not isinstance(raw, str):
+            continue
+        s = raw.replace("\n", " ").strip()
+        if 8 <= len(s) <= 500:
+            cleaned.append(s[:500])
+        # very short / very long: skipped — same policy as langdetect path
+
+    if not cleaned:
+        return {}
+
+    labels, _ = model.predict(cleaned, k=1)
+    counter: Counter[str] = Counter()
+    for row in labels:
+        if row:
+            counter[row[0].replace("__label__", "")] += 1
+    counts = dict(counter.most_common(30))
+    counts["__engine"] = f"fasttext:{len(cleaned):,}"
+    return counts
 
 
 def _ensure_fasttext_lid() -> str | None:
-    """Return a local path to the fasttext lid.176 model if available, else None.
-
-    We do not auto-download: network on dreamer may not be assumed, and the
-    user should opt into an extra 50MB dep. Place the model at
-    `$SATURN_FASTTEXT_LID` or `./.cache/saturn/lid.176.bin` to enable.
-    """
+    """Locate the lid.176 model. Accepts env var or any of several default paths."""
     import os
     from pathlib import Path
 
     env = os.environ.get("SATURN_FASTTEXT_LID")
     if env and Path(env).exists():
         return env
-    default = Path(".cache/saturn/lid.176.bin")
-    if default.exists():
-        return str(default)
+    candidates = [
+        Path.cwd() / ".cache" / "saturn" / "lid.176.bin",
+        Path.home() / ".cache" / "saturn" / "lid.176.bin",
+        Path(__file__).resolve().parent.parent / ".cache" / "saturn" / "lid.176.bin",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
     return None
 
 

@@ -143,6 +143,49 @@ def language_chart(language_counts: dict[str, int]) -> str | None:
     return _to_html(fig)
 
 
+def overlay_histogram(
+    hist_a: dict[str, list[float]],
+    hist_b: dict[str, list[float]],
+    title: str,
+    label_a: str,
+    label_b: str,
+) -> str | None:
+    """Overlay two histograms on the same axes; density-normalised so unequal
+    sample sizes do not hide the real shape difference."""
+    import plotly.graph_objects as go
+
+    if not hist_a or not hist_b:
+        return None
+    fig = go.Figure()
+    for hist, label, color in (
+        (hist_a, label_a, _LAYOUT["colorway"][0]),
+        (hist_b, label_b, _LAYOUT["colorway"][1]),
+    ):
+        counts = hist.get("counts") or []
+        edges = hist.get("edges") or []
+        if not counts or not edges:
+            continue
+        total = sum(counts) or 1
+        density = [c / total for c in counts]
+        centers = [(edges[i] + edges[i + 1]) / 2 for i in range(len(counts))]
+        fig.add_bar(
+            x=centers,
+            y=density,
+            name=label,
+            opacity=0.55,
+            marker_color=color,
+        )
+    fig.update_layout(
+        title=title,
+        barmode="overlay",
+        xaxis_title=title,
+        yaxis_title="density",
+        yaxis=dict(tickformat=".1%"),
+        **_LAYOUT,
+    )
+    return _to_html(fig)
+
+
 def correlation_heatmap(corr: list[list[Any]], labels: list[str]) -> str | None:
     import plotly.graph_objects as go
 

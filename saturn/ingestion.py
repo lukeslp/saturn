@@ -122,8 +122,12 @@ def _schema_from_dataframe(df: "pl.DataFrame", cardinality_cap: int = 1000) -> S
             schema.columns[col] = "numeric"
             continue
         if dt in (pl.Utf8, pl.String):
+            non_null = n - s.null_count()
+            if non_null == 0:
+                schema.columns[col] = "unknown"
+                continue
             unique = s.n_unique()
-            unique_ratio = unique / n if n else 0
+            unique_ratio = unique / non_null if non_null else 0
             if unique <= cardinality_cap or unique_ratio < 0.01:
                 schema.columns[col] = "categorical"
             else:
