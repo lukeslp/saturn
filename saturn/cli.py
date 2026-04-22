@@ -11,7 +11,7 @@ from rich.table import Table
 
 from . import __version__
 from .ingestion import adapter_for, reservoir_sample
-from .profilers import profile_columns
+from .profilers import profile_columns, profile_dataframe
 from .report import assemble, render_html, write_findings
 
 app = typer.Typer(
@@ -23,7 +23,55 @@ app = typer.Typer(
 console = Console()
 
 
-def _run(
+def _run_full(
+    source: str,
+    *,
+    split: str,
+    config: str | None,
+    seed: int,
+    out: Path,
+    findings: Path,
+    open_browser: bool,
+) -> None:
+    console.print(Panel(f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim](full corpus)[/]", border_style="blue"))
+
+    adapter = adapter_for(source, split=split, config=config)
+    console.print(f"[dim]adapter:[/] {type(adapter).__name__}  [dim]→[/] {adapter.source}")
+
+    with console.status("loading dataset", spinner="dots"):
+        df = adapter.load_dataframe()
+    console.print(f"[dim]loaded:[/] {df.height:,} rows × {df.width} cols  [dim]({df.estimated_size('mb'):.1f} MB in memory)[/]")
+
+    with console.status("inferring schema", spinner="dots"):
+        schema = adapter.schema()
+
+    with console.status("profiling columns (vectorised)", spinner="dots"):
+        results = profile_dataframe(df, schema.columns, sample_seed=seed)
+
+    data = assemble(
+        source=adapter.source,
+        row_count=df.height,
+        sampled_rows=df.height,
+        seed=seed,
+        schema=schema.columns,
+        results=results,
+        mode="full",
+    )
+
+    _print_summary(schema.columns, results, df.height)
+
+    out_path = render_html(data, out)
+    findings_path = write_findings(data, findings)
+    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
+    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
+
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(out_path.as_uri())
+
+
+def _run_sampled(
     source: str,
     *,
     split: str,
@@ -34,7 +82,12 @@ def _run(
     findings: Path,
     open_browser: bool,
 ) -> None:
-    console.print(Panel(f"[bold]saturn[/bold] v{__version__}  —  {source}", border_style="blue"))
+    console.print(
+        Panel(
+            f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim](sample mode, n={sample_size})[/]",
+            border_style="blue",
+        )
+    )
 
     adapter = adapter_for(source, split=split, config=config)
     console.print(f"[dim]adapter:[/] {type(adapter).__name__}  [dim]→[/] {adapter.source}")
@@ -42,13 +95,11 @@ def _run(
     with console.status("scanning schema", spinner="dots"):
         schema = adapter.schema()
 
-    console.print(f"[dim]schema:[/] {len(schema.columns)} columns")
-
     row_count = adapter.row_count()
     if row_count is not None:
-        console.print(f"[dim]rows:[/] {row_count:,}")
+        console.print(f"[dim]rows (reported):[/] {row_count:,}")
 
-    with console.status(f"sampling (n={sample_size}, seed={seed})", spinner="dots"):
+    with console.status(f"reservoir sampling (n={sample_size}, seed={seed})", spinner="dots"):
         sample, seen = reservoir_sample(
             adapter.iter_batches(batch_size=5_000), n=sample_size, seed=seed
         )
@@ -61,10 +112,11 @@ def _run(
     data = assemble(
         source=adapter.source,
         row_count=effective_count,
-        sample=sample,
+        sampled_rows=len(sample),
         seed=seed,
         schema=schema.columns,
         results=results,
+        mode="sample",
     )
 
     _print_summary(schema.columns, results, effective_count)
@@ -102,50 +154,77 @@ def _print_summary(schema: dict[str, str], results, row_count: int | None) -> No
     console.print(table)
 
 
-@app.command(name="analyze", help="Analyse a dataset (HuggingFace repo id or local file).")
+@app.command(name="analyze", help="Analyse a dataset (HuggingFace repo id or local file). Full corpus by default.")
 def analyze(
     source: str = typer.Argument(..., help="HF repo id (user/dataset) or local file path"),
-    sample_size: int = typer.Option(2000, "--sample", help="reservoir sample size"),
-    seed: int = typer.Option(42, "--seed", help="random seed for reproducible sampling"),
+    sample_size: int | None = typer.Option(
+        None,
+        "--sample",
+        help="opt into streaming sample mode (quick peek, not exhaustive)",
+    ),
+    seed: int = typer.Option(42, "--seed", help="random seed for deterministic sub-samples"),
     out: Path = typer.Option(Path("saturn_report.html"), "--out"),
     findings: Path = typer.Option(Path("saturn_findings.json"), "--findings"),
-    split: str = typer.Option("train", "--split", help="HF dataset split"),
+    split: str | None = typer.Option(None, "--split", help="HF dataset split (default: concatenate every split)"),
     config: str | None = typer.Option(None, "--config", help="HF dataset config name"),
     open_browser: bool = typer.Option(False, "--open", help="open report in browser after run"),
 ) -> None:
-    _run(
-        source,
-        split=split,
-        config=config,
-        sample_size=sample_size,
-        seed=seed,
-        out=out,
-        findings=findings,
-        open_browser=open_browser,
-    )
+    if sample_size:
+        _run_sampled(
+            source,
+            split=split,
+            config=config,
+            sample_size=sample_size,
+            seed=seed,
+            out=out,
+            findings=findings,
+            open_browser=open_browser,
+        )
+    else:
+        _run_full(
+            source,
+            split=split,
+            config=config,
+            seed=seed,
+            out=out,
+            findings=findings,
+            open_browser=open_browser,
+        )
 
 
 @app.command(name="huggingface", help="Convenience: analyse a HuggingFace dataset.")
 def huggingface(
     repo: str = typer.Argument(..., help="HuggingFace repo id (user/dataset)"),
-    sample_size: int = typer.Option(2000, "--sample"),
+    sample_size: int | None = typer.Option(None, "--sample"),
     seed: int = typer.Option(42, "--seed"),
     out: Path = typer.Option(Path("saturn_report.html"), "--out"),
     findings: Path = typer.Option(Path("saturn_findings.json"), "--findings"),
-    split: str = typer.Option("train", "--split"),
+    split: str | None = typer.Option(None, "--split", help="HF split (default: concat every split)"),
     config: str | None = typer.Option(None, "--config"),
     open_browser: bool = typer.Option(False, "--open"),
 ) -> None:
-    _run(
-        f"hf://{repo}",
-        split=split,
-        config=config,
-        sample_size=sample_size,
-        seed=seed,
-        out=out,
-        findings=findings,
-        open_browser=open_browser,
-    )
+    src = f"hf://{repo}"
+    if sample_size:
+        _run_sampled(
+            src,
+            split=split,
+            config=config,
+            sample_size=sample_size,
+            seed=seed,
+            out=out,
+            findings=findings,
+            open_browser=open_browser,
+        )
+    else:
+        _run_full(
+            src,
+            split=split,
+            config=config,
+            seed=seed,
+            out=out,
+            findings=findings,
+            open_browser=open_browser,
+        )
 
 
 @app.command(name="version")

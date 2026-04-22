@@ -27,6 +27,7 @@ class DatasetMeta:
     row_count: int | None
     sampled_rows: int
     seed: int
+    mode: str = "full"  # 'full' or 'sample'
     generated_at: str = ""
 
     def __post_init__(self) -> None:
@@ -53,6 +54,7 @@ class ReportData:
                 "row_count": self.meta.row_count,
                 "sampled_rows": self.meta.sampled_rows,
                 "seed": self.meta.seed,
+                "mode": self.meta.mode,
                 "generated_at": self.meta.generated_at,
             },
             "schema": self.schema,
@@ -65,16 +67,18 @@ class ReportData:
 def assemble(
     source: str,
     row_count: int | None,
-    sample: list[dict[str, Any]],
+    sampled_rows: int,
     seed: int,
     schema: dict[str, str],
     results: list[ProfileResult],
+    mode: str = "full",
 ) -> ReportData:
     meta = DatasetMeta(
         source=source,
         row_count=row_count,
-        sampled_rows=len(sample),
+        sampled_rows=sampled_rows,
         seed=seed,
+        mode=mode,
     )
     data = ReportData(meta=meta, schema=schema, results=results)
 

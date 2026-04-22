@@ -18,10 +18,11 @@ def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
     data = assemble(
         source="test://tiny",
         row_count=len(tiny_synthetic),
-        sample=tiny_synthetic,
+        sampled_rows=len(tiny_synthetic),
         seed=42,
         schema=schema,
         results=results,
+        mode="sample",
     )
 
     html_path = render_html(data, tmp_path / "report.html")
