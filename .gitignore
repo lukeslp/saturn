@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtualenv
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+.hf_cache/
+.huggingface/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Saturn outputs
+saturn_report.html
+saturn_findings.json
+*.saturn.html
+*.saturn.json
+
+# Local sample data
+data/
+!tests/fixtures/

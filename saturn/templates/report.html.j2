@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>saturn — {{ data.meta.source }}</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #14161a;
+    --muted: #5b6472;
+    --panel: #f7f7f9;
+    --accent: #2d5cf6;
+    --warn: #b45309;
+    --error: #b91c1c;
+    --ok: #047857;
+  }
+  html, body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif; margin: 0; line-height: 1.5; }
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header h1 { margin: 0 0 .25rem 0; font-size: 1.9rem; letter-spacing: -.01em; }
+  header p { color: var(--muted); margin: 0; }
+  .chip { display: inline-block; background: var(--panel); border-radius: 999px; padding: .15rem .6rem; margin-right: .35rem; font-size: .8rem; color: var(--muted); }
+  .toc { display: flex; flex-wrap: wrap; gap: .35rem .6rem; padding: .75rem 1rem; background: var(--panel); border-radius: 8px; margin: 1.25rem 0 2rem; font-size: .9rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  section { margin: 2rem 0; }
+  section h2 { margin-bottom: .25rem; font-size: 1.25rem; letter-spacing: -.01em; }
+  section h3 { margin-top: 1.5rem; margin-bottom: .25rem; font-size: 1.05rem; }
+  .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem; margin: .75rem 0; background: #fff; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem .75rem; margin: .5rem 0 .75rem; }
+  .stat { background: var(--panel); padding: .45rem .6rem; border-radius: 6px; }
+  .stat .label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .alerts { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 .75rem; }
+  .alert { font-size: .8rem; padding: .15rem .5rem; border-radius: 999px; }
+  .alert.info { background: #e0e7ff; color: #3730a3; }
+  .alert.warn { background: #fef3c7; color: var(--warn); }
+  .alert.error { background: #fee2e2; color: var(--error); }
+  .meta-table { border-collapse: collapse; font-size: .9rem; }
+  .meta-table td { padding: .2rem .75rem .2rem 0; color: var(--muted); }
+  .meta-table td + td { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+  .sample-list { margin: .5rem 0 0; padding-left: 1.1rem; font-size: .88rem; color: var(--muted); }
+  .sample-list li { margin: .15rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>saturn</h1>
+    <p>
+      <span class="chip">{{ data.meta.source }}</span>
+      {% if data.meta.row_count %}<span class="chip">{{ data.meta.row_count | num }} rows</span>{% endif %}
+      <span class="chip">sample n={{ data.meta.sampled_rows | num }}</span>
+      <span class="chip">seed {{ data.meta.seed }}</span>
+      <span class="chip">{{ data.meta.generated_at }}</span>
+    </p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <a href="#overview">Overview</a>
+    {% if data.correlation_chart_html %}<a href="#correlation">Correlation</a>{% endif %}
+    {% if data.language_chart_html %}<a href="#languages">Languages</a>{% endif %}
+    {% for r in data.results %}
+      <a href="#col-{{ loop.index }}">{{ r.column }}</a>
+    {% endfor %}
+  </nav>
+
+  <section id="overview">
+    <h2>Overview</h2>
+    <div class="card">
+      <table class="meta-table">
+        <tr><td>Source</td><td>{{ data.meta.source }}</td></tr>
+        <tr><td>Total rows</td><td>{{ data.meta.row_count | num if data.meta.row_count else 'unknown (streamed)' }}</td></tr>
+        <tr><td>Profiled sample</td><td>{{ data.meta.sampled_rows | num }}</td></tr>
+        <tr><td>Columns</td><td>{{ data.schema | length }}</td></tr>
+        <tr><td>Generated</td><td>{{ data.meta.generated_at }}</td></tr>
+      </table>
+      {% if data.overview_chart_html %}
+        {{ data.overview_chart_html | safe }}
+      {% endif %}
+    </div>
+  </section>
+
+  {% if data.correlation_chart_html %}
+  <section id="correlation">
+    <h2>Numeric correlation</h2>
+    <div class="card">{{ data.correlation_chart_html | safe }}</div>
+  </section>
+  {% endif %}
+
+  {% if data.language_chart_html %}
+  <section id="languages">
+    <h2>Languages detected</h2>
+    <div class="card">
+      <p class="muted">Per-string language detection across text columns (sampled).</p>
+      {{ data.language_chart_html | safe }}
+    </div>
+  </section>
+  {% endif %}
+
+  {% for r in data.results %}
+  <section id="col-{{ loop.index }}">
+    <h2>{{ r.column }} <span class="chip">{{ r.kind }}</span></h2>
+    <div class="card">
+      <div class="alerts">
+        {% for a in r.alerts %}
+          <span class="alert {{ a.level }}" title="{{ a.code }}">{{ a.message }}</span>
+        {% endfor %}
+      </div>
+      <div class="stats-grid">
+        <div class="stat"><span class="label">rows</span><span class="value">{{ r.n | num }}</span></div>
+        <div class="stat"><span class="label">null</span><span class="value">{{ r.n_null | num }} ({{ r.null_rate | pct }})</span></div>
+        {% if r.n_unique is not none %}
+          <div class="stat"><span class="label">unique</span><span class="value">{{ r.n_unique | num }}</span></div>
+        {% endif %}
+        {% for key, val in r.stats.items() %}
+          <div class="stat"><span class="label">{{ key }}</span><span class="value">{{ val | num }}</span></div>
+        {% endfor %}
+      </div>
+      {% if charts[r.column] %}
+        {{ charts[r.column] | safe }}
+      {% endif %}
+      {% if r.kind == 'text' and r.extras.get('sample') %}
+        <details>
+          <summary class="muted">Sample values (first 10)</summary>
+          <ol class="sample-list">
+            {% for s in r.extras['sample'][:10] %}
+              <li>{{ s[:280] }}{% if s|length > 280 %}…{% endif %}</li>
+            {% endfor %}
+          </ol>
+        </details>
+      {% endif %}
+      {% if r.kind == 'categorical' and r.extras.get('top_values') %}
+        <details>
+          <summary class="muted">Top values (rank 1–20)</summary>
+          <ol class="sample-list">
+            {% for label, count in r.extras['top_values'] %}
+              <li>{{ label }} — {{ count | num }}</li>
+            {% endfor %}
+          </ol>
+        </details>
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <footer>
+    Saturn v{{ version }}. Report generated from a seeded reservoir sample; re-run with the same seed for identical output.
+  </footer>
+</main>
+</body>
+</html>
