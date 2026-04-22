@@ -61,8 +61,75 @@ class CompareReport:
             "a": self.a.to_dict(),
             "b": self.b.to_dict(),
             "columns": [c.to_dict() for c in self.columns],
+            "divergences": self.divergence_summary(),
             "generated_at": self.generated_at,
         }
+
+    def divergence_summary(self, k: int = 6) -> list[dict[str, Any]]:
+        """Return the top-K columns ranked by a composite divergence score.
+
+        Score combines (whichever apply): normalised mean/length delta,
+        normalised null-rate delta, 1 - top-value jaccard, 1 - language
+        jaccard, normalised entropy delta. Every term is capped at 1.0 so a
+        single runaway value does not dominate the ranking.
+        """
+        scored: list[tuple[float, ColumnComparison, list[str]]] = []
+        for c in self.columns:
+            if c.a is None or c.b is None:
+                continue
+            score = 0.0
+            terms: list[str] = []
+            d = c.delta or {}
+
+            nd = abs(d.get("null_rate_delta") or 0.0)
+            if nd > 0.02:
+                score += min(nd, 1.0)
+                terms.append(f"null {nd:+.0%}")
+
+            if "mean_a" in d:
+                base = max(abs(d.get("mean_a") or 0.0), 1e-9)
+                diff = abs(d.get("mean_delta") or 0.0) / base
+                if diff > 0.05:
+                    score += min(diff, 1.0)
+                    terms.append(f"mean {d['mean_delta']:+.2f}")
+
+            if "len_mean_a" in d:
+                base = max(abs(d.get("len_mean_a") or 0.0), 1e-9)
+                diff = abs(d.get("len_mean_delta") or 0.0) / base
+                if diff > 0.05:
+                    score += min(diff, 1.0)
+                    terms.append(f"len_mean {d['len_mean_delta']:+.0f}")
+
+            entropy_a = d.get("entropy_a")
+            entropy_b = d.get("entropy_b")
+            if isinstance(entropy_a, (int, float)) and isinstance(entropy_b, (int, float)):
+                base = max(abs(entropy_a), 1e-9)
+                diff = abs(entropy_b - entropy_a) / base
+                if diff > 0.05:
+                    score += min(diff, 1.0)
+                    terms.append(f"entropy Δ {(entropy_b - entropy_a):+.2f}")
+
+            lj = d.get("language_jaccard")
+            if lj is not None and lj < 0.8:
+                score += 1.0 - lj
+                terms.append(f"lang-jaccard {lj:.2f}")
+            tj = d.get("top_value_jaccard")
+            if tj is not None and tj < 0.5:
+                score += 1.0 - tj
+                terms.append(f"top-val-jaccard {tj:.2f}")
+
+            if c.notes:  # schema mismatch is always a divergence
+                score += 0.5
+                terms.append("schema mismatch")
+
+            if score > 0:
+                scored.append((score, c, terms))
+
+        scored.sort(key=lambda t: t[0], reverse=True)
+        return [
+            {"column": c.column, "kind": c.kind, "score": round(s, 3), "signals": terms}
+            for s, c, terms in scored[:k]
+        ]
 
 
 def _safe(value: Any) -> float | None:

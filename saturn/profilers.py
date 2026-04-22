@@ -142,13 +142,22 @@ def _profile_numeric_series(column: str, s: "pl.Series") -> ProfileResult:
     outlier_mask = (clean < q1 - 1.5 * iqr) | (clean > q3 + 1.5 * iqr)
     n_outliers = int(outlier_mask.sum())
 
-    # skew + kurtosis via numpy; clean may be up to tens of millions → np once
+    # skew + kurtosis via numpy; guard against near-constant arrays where
+    # scipy raises a precision-loss warning (kurtosis / std^3 → 0/0)
     import numpy as np
+    import warnings
+
     from scipy import stats as scs
 
     arr = clean.to_numpy()
-    skew = float(scs.skew(arr)) if arr.size > 2 else 0.0
-    kurt = float(scs.kurtosis(arr)) if arr.size > 3 else 0.0
+    if arr.size > 2 and float(arr.std(ddof=0)) > 1e-12:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            skew = float(scs.skew(arr))
+            kurt = float(scs.kurtosis(arr)) if arr.size > 3 else 0.0
+    else:
+        skew = 0.0
+        kurt = 0.0
 
     hist_bins = min(40, max(5, int(math.sqrt(arr.size))))
     hist_counts, hist_edges = np.histogram(arr, bins=hist_bins)
@@ -198,6 +207,29 @@ _VOCAB_ROW_CHAR_CAP = 500
 _VOCAB_SKIP_AVG_LEN = 2000  # skip vocab entirely on JSON-blob-like columns
 _NEAR_UNIQUE_FRAC = 0.95
 
+# --- alt-text / caption-shaped quality signals -------------------------------
+# Applied to every text column where they make sense. Generic enough to light
+# up any caption/description/prose corpus, but named after the alt-text
+# research motivation that first demanded them.
+
+_EMOJI_RE = (
+    r"[\U0001F300-\U0001FAFF\U0001F000-\U0001F2FF☀-➿]"
+)
+_URL_RE = r"https?://\S+|www\.\S+"
+_BOILERPLATE_PREFIXES = (
+    "a photo of",
+    "an image of",
+    "image of",
+    "photo of",
+    "picture of",
+    "a picture of",
+    "screenshot of",
+    "this is a",
+    "this image",
+    "alt text:",
+    "alt:",
+)
+
 
 def _profile_text_series(
     column: str, s: "pl.Series", *, lang_sample: "pl.Series | None" = None
@@ -220,9 +252,35 @@ def _profile_text_series(
     lens_np = lengths.drop_nulls().cast(pl.Int64).to_numpy()
     len_mean = float(lens_np.mean()) if lens_np.size else 0.0
 
+    # --- caption/description quality signals (generic + alt-text-flavoured)
+
     # word-count estimate (avoid regex on huge blobs; whitespace split is O(n) and fast)
     words_per_row = clean.str.split(" ").list.len()
     words_np = words_per_row.drop_nulls().cast(pl.Int64).to_numpy()
+
+    # caption-quality signals — all vectorised, all optional in the template
+    total_non_null = clean.len()
+    emoji_rows = int(clean.str.contains(_EMOJI_RE).sum()) if total_non_null else 0
+    url_rows = int(clean.str.contains(_URL_RE).sum()) if total_non_null else 0
+    one_word_rows = int((words_per_row <= 1).sum())
+    # all-caps: row is uppercase and has at least 3 chars (skip "A", "OK")
+    long_enough = clean.filter(lengths >= 3)
+    allcaps_rows = int(
+        (long_enough == long_enough.str.to_uppercase()).sum()
+    ) if long_enough.len() else 0
+    # boilerplate prefix: case-insensitive starts-with any known opener
+    lowered_prefix = clean.str.to_lowercase().str.slice(0, 32)
+    boilerplate_rows = 0
+    for prefix in _BOILERPLATE_PREFIXES:
+        boilerplate_rows += int(lowered_prefix.str.starts_with(prefix).sum())
+
+    quality = {
+        "emoji_rate": emoji_rows / total_non_null if total_non_null else 0.0,
+        "url_rate": url_rows / total_non_null if total_non_null else 0.0,
+        "one_word_rate": one_word_rows / total_non_null if total_non_null else 0.0,
+        "allcaps_rate": allcaps_rows / total_non_null if total_non_null else 0.0,
+        "boilerplate_rate": boilerplate_rows / total_non_null if total_non_null else 0.0,
+    }
 
     # duplicate detection — polars native, handles near-unique columns fine
     n_unique = clean.n_unique()
@@ -290,6 +348,11 @@ def _profile_text_series(
         "duplicate_rate": float(n_duplicates / clean.len()),
         "vocab_size": vocab_size,
         "readability_flesch_mean": float(np.mean(fk_scores)) if fk_scores else None,
+        "emoji_rate": quality["emoji_rate"],
+        "url_rate": quality["url_rate"],
+        "one_word_rate": quality["one_word_rate"],
+        "allcaps_rate": quality["allcaps_rate"],
+        "boilerplate_rate": quality["boilerplate_rate"],
     }
     result.extras = {
         "length_histogram": _np_hist(lens_np, bins=40),
@@ -321,6 +384,27 @@ def _profile_text_series(
         )
     if vocab_skipped_reason:
         result.alerts.append(Alert("info", "vocab_skipped", vocab_skipped_reason))
+
+    if quality["one_word_rate"] > 0.25:
+        result.alerts.append(
+            Alert("warn", "one_word", f"{quality['one_word_rate']:.1%} rows are a single word")
+        )
+    if quality["allcaps_rate"] > 0.1:
+        result.alerts.append(
+            Alert("info", "allcaps", f"{quality['allcaps_rate']:.1%} rows are all-caps")
+        )
+    if quality["url_rate"] > 0.25:
+        result.alerts.append(
+            Alert("info", "url_heavy", f"{quality['url_rate']:.1%} rows contain a URL")
+        )
+    if quality["boilerplate_rate"] > 0.2:
+        result.alerts.append(
+            Alert(
+                "warn",
+                "boilerplate",
+                f"{quality['boilerplate_rate']:.1%} rows start with boilerplate ('image of', …)",
+            )
+        )
     return result
 
 

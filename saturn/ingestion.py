@@ -241,13 +241,62 @@ class HFAdapter(SourceAdapter):
     def load_dataframe(self) -> "pl.DataFrame":
         import polars as pl
 
-        ds = self._load()
         try:
-            df = pl.from_arrow(ds.data.table)
-        except AttributeError:
-            df = pl.from_pandas(ds.to_pandas())
-        if isinstance(df, pl.Series):
-            df = df.to_frame()
+            ds = self._load()
+            try:
+                df = pl.from_arrow(ds.data.table)
+            except AttributeError:
+                df = pl.from_pandas(ds.to_pandas())
+            if isinstance(df, pl.Series):
+                df = df.to_frame()
+            self._row_count = df.height
+            self._schema = _schema_from_dataframe(df)
+            return df
+        except Exception as e:
+            # Common HF failure: DatasetGenerationError when shards have divergent
+            # schemas. Fall through to the streaming iterator + bounded cap so
+            # saturn still emits a report on stubborn datasets.
+            from rich.console import Console
+
+            Console().print(
+                f"[yellow]HF bulk load failed ({type(e).__name__}); falling back to streamed load[/]"
+            )
+            return self._load_dataframe_via_stream()
+
+    def _load_dataframe_via_stream(self, cap: int = 500_000) -> "pl.DataFrame":
+        """Stream the dataset and materialise up to `cap` rows into polars.
+
+        Used when `load_dataset` chokes on schema divergence across shards. We
+        accept the loss of the full-corpus guarantee in exchange for getting a
+        useful report out of an otherwise unprofilable dataset.
+        """
+        import polars as pl
+
+        ds = self._load_streaming()
+        rows: list[dict[str, Any]] = []
+        for row in ds:
+            rows.append(dict(row))
+            if len(rows) >= cap:
+                break
+        if not rows:
+            raise RuntimeError("streaming fallback produced zero rows")
+
+        # union of keys across rows (shards with divergent schemas end up sharing
+        # a common superset; missing keys become None)
+        all_keys: set[str] = set()
+        for r in rows:
+            all_keys.update(r.keys())
+        normalised = [{k: r.get(k) for k in all_keys} for r in rows]
+
+        try:
+            df = pl.DataFrame(normalised, infer_schema_length=min(5000, len(normalised)))
+        except Exception:
+            # nested dicts / arrow-compatible structs confuse polars; drop those cols
+            stringified = [
+                {k: (str(v) if isinstance(v, (dict, list)) else v) for k, v in r.items()}
+                for r in normalised
+            ]
+            df = pl.DataFrame(stringified, infer_schema_length=min(5000, len(stringified)))
         self._row_count = df.height
         self._schema = _schema_from_dataframe(df)
         return df

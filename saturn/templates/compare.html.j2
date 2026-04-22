@@ -45,6 +45,8 @@
   .alert.error { background: #fee2e2; color: var(--error); }
   .muted { color: var(--muted); font-size: .9rem; }
   footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+  .sample-list { margin: .5rem 0 0; padding-left: 1.25rem; }
+  .sample-list li { margin: .35rem 0; }
   .pill-a { display: inline-block; background: var(--accent-a); color: white; font-weight: 600; padding: .05rem .45rem; border-radius: 4px; font-size: .8rem; }
   .pill-b { display: inline-block; background: var(--accent-b); color: white; font-weight: 600; padding: .05rem .45rem; border-radius: 4px; font-size: .8rem; }
 </style>
@@ -66,6 +68,28 @@
       <span class="chip">{{ report.generated_at }}</span>
     </p>
   </header>
+
+  {% set divergences = report.divergence_summary() %}
+  {% if divergences %}
+  <section id="most-divergent">
+    <h2>Most divergent columns</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0;">Ranked by a composite of null-rate drift, mean/length delta, entropy delta, top-value jaccard, and language-mix jaccard.</p>
+      <ol class="sample-list" style="margin-top:.25rem;">
+      {% for d in divergences %}
+        <li>
+          <a href="#col-{{ d.column | anchor(report.columns) }}">{{ d.column }}</a>
+          <span class="chip">{{ d.kind }}</span>
+          <span class="muted">score {{ d.score }}</span>
+          {% for signal in d.signals %}
+            <span class="chip">{{ signal }}</span>
+          {% endfor %}
+        </li>
+      {% endfor %}
+      </ol>
+    </div>
+  </section>
+  {% endif %}
 
   <nav class="toc" aria-label="Contents">
     {% for col in report.columns %}

@@ -41,6 +41,7 @@ nlp = [
     "spacy>=3.7",
     "sentence-transformers>=2.7",
     "bertopic>=0.16",
+    "fasttext-wheel>=0.9",
 ]
 llm = [
     # Provider clients are pulled in via shared/llm_providers; optional here if running without ~/shared on PYTHONPATH

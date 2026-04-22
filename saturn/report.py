@@ -87,11 +87,13 @@ def assemble(
         [(r.column, r.null_rate) for r in results]
     )
 
-    # language counts aggregated across text columns
+    # language counts aggregated across text columns (skip __engine metadata)
     merged: dict[str, int] = {}
     for r in results:
         if r.kind == "text":
             for lang, n in r.extras.get("language_counts", {}).items():
+                if lang.startswith("__") or not isinstance(n, int):
+                    continue
                 merged[lang] = merged.get(lang, 0) + n
     data.language_counts = merged
     data.language_chart_html = language_chart(merged)
@@ -181,7 +183,16 @@ def _jinja() -> Environment:
     env.filters["num"] = _fmt_num
     env.filters["signed"] = _fmt_signed
     env.filters["delta_rows"] = _delta_rows
+    env.filters["anchor"] = _anchor_index
     return env
+
+
+def _anchor_index(column_name: str, columns) -> int:
+    """Given a column name and the full column-comparison list, return the 1-based index."""
+    for i, c in enumerate(columns, start=1):
+        if c.column == column_name:
+            return i
+    return 1
 
 
 def _fmt_signed(v: Any) -> str:
