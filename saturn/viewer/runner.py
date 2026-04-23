@@ -179,7 +179,13 @@ def backfill_insights(
     _set(job_id, finding_id=finding_id, message=f"{len(bundle.insights)} insight(s) generated")
 
 
-_UPLOAD_EXTENSIONS = {".csv", ".jsonl", ".ndjson", ".parquet", ".json", ".db", ".sqlite", ".sqlite3"}
+_UPLOAD_EXTENSIONS = {
+    ".csv", ".tsv",
+    ".jsonl", ".ndjson", ".json",
+    ".parquet", ".feather", ".arrow",
+    ".xlsx", ".xls", ".xlsb", ".ods",
+    ".db", ".sqlite", ".sqlite3",
+}
 
 
 def analyze_upload(

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**saturn** (PyPI name: `saturn-dissect`, CLI: `saturn`) is a dataset dissector. Point it at a HuggingFace repo or a local CSV/JSONL/Parquet/SQLite file and it emits three artifacts from one run: a Rich terminal summary, a self-contained HTML report, and a JSON findings sidecar. The stats pass is free and deterministic; the language-model insight pass (Phase 2) and BERTopic clustering (Phase 3) are opt-in. Primary target dataset: `lukeslp/bluesky-alt-text` (404K rows, profiled in ~46 s).
+**saturn** (PyPI name: `saturn-dissect`, CLI: `saturn`) is a dataset dissector. Point it at a HuggingFace repo or a local tabular file (CSV, TSV, JSON/JSONL, Parquet, Feather/Arrow, XLSX/XLS/XLSB/ODS, SQLite) and it emits three artifacts from one run: a Rich terminal summary, a self-contained HTML report, and a JSON findings sidecar. The stats pass is free and deterministic; the language-model insight pass (Phase 2) and BERTopic clustering (Phase 3) are opt-in. Primary target dataset: `lukeslp/bluesky-alt-text` (404K rows, profiled in ~46 s).
 
 This directory is an **independent git repo** (remote: `lukeslp/saturn`). It is listed in the parent `projects/` gitignore, so `git status` at the parent shows nothing. Always `cd` here and run git commands locally.
 
