@@ -247,18 +247,16 @@ _CATEGORICAL_DELTA_KEYS = [
 ]
 
 
-def _delta_rows(delta: dict[str, Any]):
-    """Jinja filter: yield (display_key, a_val, b_val, delta, note) tuples."""
-    # infer kind by which a/b keys exist
-    keys: list[tuple[str, str]]
-    if "len_mean_a" in delta:
-        keys = _TEXT_DELTA_KEYS
-    elif "entropy_a" in delta and "mean_a" not in delta:
-        keys = _CATEGORICAL_DELTA_KEYS
-    elif "mean_a" in delta:
-        keys = _NUMERIC_DELTA_KEYS
-    else:
-        keys = []
+_DELTA_KEYS_BY_KIND = {
+    "numeric": _NUMERIC_DELTA_KEYS,
+    "text": _TEXT_DELTA_KEYS,
+    "categorical": _CATEGORICAL_DELTA_KEYS,
+}
+
+
+def _delta_rows(delta: dict[str, Any], kind: str = ""):
+    """Jinja filter: yield (display_key, a_val, b_val, delta, note) tuples for `kind`."""
+    keys = _DELTA_KEYS_BY_KIND.get(kind, [])
 
     for raw, pretty in keys:
         a_val = delta.get(f"{raw}_a")

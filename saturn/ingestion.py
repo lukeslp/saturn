@@ -99,6 +99,15 @@ def _infer_schema_from_sample(sample: list[dict[str, Any]]) -> Schema:
     return schema
 
 
+def _ensure_frame(obj: "pl.DataFrame | pl.Series") -> "pl.DataFrame":
+    """polars returns a Series for single-column arrow tables — wrap it back to a frame."""
+    import polars as pl
+
+    if isinstance(obj, pl.Series):
+        return obj.to_frame()
+    return obj
+
+
 def _schema_from_dataframe(df: "pl.DataFrame", cardinality_cap: int = 1000) -> Schema:
     """Refine coarse types using polars dtype + cheap unique counts.
 
@@ -121,7 +130,7 @@ def _schema_from_dataframe(df: "pl.DataFrame", cardinality_cap: int = 1000) -> S
         if dt.is_numeric():
             schema.columns[col] = "numeric"
             continue
-        if dt in (pl.Utf8, pl.String):
+        if dt == pl.String:  # polars 0.19+: pl.Utf8 is an alias for pl.String
             non_null = n - s.null_count()
             if non_null == 0:
                 schema.columns[col] = "unknown"
@@ -247,8 +256,7 @@ class HFAdapter(SourceAdapter):
                 df = pl.from_arrow(ds.data.table)
             except AttributeError:
                 df = pl.from_pandas(ds.to_pandas())
-            if isinstance(df, pl.Series):
-                df = df.to_frame()
+            df = _ensure_frame(df)
             self._row_count = df.height
             self._schema = _schema_from_dataframe(df)
             return df
@@ -412,15 +420,11 @@ class FileAdapter(SourceAdapter):
             else:
                 # SQLite (and fallback): go through DuckDB's arrow export
                 tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
-                df = pl.from_arrow(tbl)
-                if isinstance(df, pl.Series):
-                    df = df.to_frame()
+                df = _ensure_frame(pl.from_arrow(tbl))
         except Exception:
             # last-ditch: DuckDB can read almost anything
             tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
-            df = pl.from_arrow(tbl)
-            if isinstance(df, pl.Series):
-                df = df.to_frame()
+            df = _ensure_frame(pl.from_arrow(tbl))
 
         self._df = df
         self._row_count = df.height

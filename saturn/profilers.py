@@ -68,6 +68,103 @@ _CARD_WARN = 0.95
 _NULL_WARN = 0.2
 
 
+def _numeric_stats(a) -> tuple[dict, dict]:
+    """Given a numpy array of clean floats, return (stats, extras).
+
+    Shared core for both `_profile_numeric_series` (polars) and `_dict_numeric`.
+    Guards borrowed from the polars path:
+    - scipy precision-loss RuntimeWarning is silenced on near-constant arrays
+    - skew/kurtosis are 0.0 when std is near-zero (would otherwise be 0/0)
+    """
+    import warnings
+
+    import numpy as np
+    from scipy import stats as scs
+
+    q1, q3 = np.quantile(a, [0.25, 0.75])
+    iqr = q3 - q1
+    outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
+
+    if a.size > 2 and float(a.std(ddof=0)) > 1e-12:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            skew = float(scs.skew(a))
+            kurt = float(scs.kurtosis(a)) if a.size > 3 else 0.0
+    else:
+        skew = 0.0
+        kurt = 0.0
+
+    stats = {
+        "min": float(a.min()),
+        "max": float(a.max()),
+        "mean": float(a.mean()),
+        "median": float(np.median(a)),
+        "std": float(a.std(ddof=1)) if a.size > 1 else 0.0,
+        "q1": float(q1),
+        "q3": float(q3),
+        "iqr": float(iqr),
+        "skew": skew,
+        "kurtosis": kurt,
+        "n_outliers": int(outlier_mask.sum()),
+        "outlier_rate": float(outlier_mask.mean()),
+        "zero_rate": float((a == 0).mean()),
+    }
+    bins = min(40, max(5, int(math.sqrt(a.size))))
+    hist_counts, hist_edges = np.histogram(a, bins=bins)
+    sample_idx = np.random.default_rng(42).choice(
+        a.size, size=min(500, a.size), replace=False
+    )
+    extras = {
+        "histogram": {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()},
+        "sample": a[np.sort(sample_idx)].tolist(),
+    }
+    return stats, extras
+
+
+def _emit_common_alerts(result: ProfileResult) -> None:
+    """Append alerts common to both profile paths, skipping codes already present.
+
+    Guards: skip-if-present means callers can invoke this alongside existing
+    inline emissions without dup'ing. Stats that the path didn't compute (near-
+    unique columns skip duplicate_counter; JSON-blob columns skip vocab) read
+    as None and fail the predicate silently.
+    """
+    s = result.stats
+    codes = {a.code for a in result.alerts}
+
+    def add(level: str, code: str, condition: bool, message: str) -> None:
+        if code in codes or not condition:
+            return
+        result.alerts.append(Alert(level, code, message))
+        codes.add(code)
+
+    add("warn", "null_rate", result.null_rate > _NULL_WARN,
+        f"{result.null_rate:.1%} null")
+
+    if result.kind == "numeric":
+        skew = s.get("skew")
+        outlier_rate = s.get("outlier_rate")
+        add("info", "high_skew", skew is not None and abs(skew) > 2,
+            f"skew={skew:+.2f}" if skew is not None else "")
+        add("warn", "outliers",
+            outlier_rate is not None and outlier_rate > 0.05,
+            f"{outlier_rate:.1%} rows beyond 1.5 IQR" if outlier_rate is not None else "")
+        add("info", "constant", result.n_unique == 1, "only one distinct value")
+    elif result.kind == "text":
+        len_p95 = s.get("len_p95")
+        dup_rate = s.get("duplicate_rate")
+        add("info", "short_text", len_p95 is not None and len_p95 < 20,
+            "95th-percentile length under 20 chars")
+        add("warn", "duplicates",
+            dup_rate is not None and dup_rate > 0.2,
+            f"{dup_rate:.1%} duplicate strings" if dup_rate is not None else "")
+    elif result.kind == "categorical":
+        top_rate = s.get("top_rate")
+        add("warn", "imbalance",
+            top_rate is not None and top_rate > _CARD_WARN,
+            f"top value is {top_rate:.1%} of rows" if top_rate is not None else "")
+
+
 def profile_dataframe(
     df: "pl.DataFrame", schema: dict[str, str], *, sample_seed: int = 42
 ) -> list[ProfileResult]:
@@ -127,78 +224,10 @@ def _profile_numeric_series(column: str, s: "pl.Series") -> ProfileResult:
         result.alerts.append(Alert("warn", "all_null", "column is entirely null or non-numeric"))
         return result
 
-    # vectorised stats
-    minimum = float(clean.min())  # type: ignore[arg-type]
-    maximum = float(clean.max())  # type: ignore[arg-type]
-    mean = float(clean.mean())  # type: ignore[arg-type]
-    std = float(clean.std(ddof=1)) if clean.len() > 1 else 0.0
-    median = float(clean.median())  # type: ignore[arg-type]
-    q1 = float(clean.quantile(0.25))  # type: ignore[arg-type]
-    q3 = float(clean.quantile(0.75))  # type: ignore[arg-type]
-    iqr = q3 - q1
-    n_unique = clean.n_unique()
-    zero_rate = float((clean == 0).sum() / clean.len())
+    result.n_unique = clean.n_unique()
+    result.stats, result.extras = _numeric_stats(clean.to_numpy())
 
-    outlier_mask = (clean < q1 - 1.5 * iqr) | (clean > q3 + 1.5 * iqr)
-    n_outliers = int(outlier_mask.sum())
-
-    # skew + kurtosis via numpy; guard against near-constant arrays where
-    # scipy raises a precision-loss warning (kurtosis / std^3 → 0/0)
-    import numpy as np
-    import warnings
-
-    from scipy import stats as scs
-
-    arr = clean.to_numpy()
-    if arr.size > 2 and float(arr.std(ddof=0)) > 1e-12:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            skew = float(scs.skew(arr))
-            kurt = float(scs.kurtosis(arr)) if arr.size > 3 else 0.0
-    else:
-        skew = 0.0
-        kurt = 0.0
-
-    hist_bins = min(40, max(5, int(math.sqrt(arr.size))))
-    hist_counts, hist_edges = np.histogram(arr, bins=hist_bins)
-
-    # sample for correlation heatmap downstream (bounded)
-    sample_size = min(500, arr.size)
-    rng = np.random.default_rng(42)
-    sample_idx = rng.choice(arr.size, size=sample_size, replace=False)
-    chart_sample = arr[np.sort(sample_idx)].tolist()
-
-    result.n_unique = n_unique
-    result.stats = {
-        "min": minimum,
-        "max": maximum,
-        "mean": mean,
-        "median": median,
-        "std": std,
-        "q1": q1,
-        "q3": q3,
-        "iqr": iqr,
-        "skew": skew,
-        "kurtosis": kurt,
-        "n_outliers": n_outliers,
-        "outlier_rate": float(n_outliers / clean.len()),
-        "zero_rate": zero_rate,
-    }
-    result.extras = {
-        "histogram": {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()},
-        "sample": chart_sample,
-    }
-
-    if abs(skew) > 2:
-        result.alerts.append(Alert("info", "high_skew", f"skew={skew:+.2f}"))
-    if result.stats["outlier_rate"] > 0.05:
-        result.alerts.append(
-            Alert("warn", "outliers", f"{result.stats['outlier_rate']:.1%} rows beyond 1.5 IQR")
-        )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
-    if n_unique == 1:
-        result.alerts.append(Alert("info", "constant", "only one distinct value"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -370,14 +399,6 @@ def _profile_text_series(
         result.alerts.append(
             Alert("info", "near_unique", f"{(n_unique / clean.len()):.1%} of rows are unique strings")
         )
-    if result.stats["duplicate_rate"] > 0.2:
-        result.alerts.append(
-            Alert("warn", "duplicates", f"{result.stats['duplicate_rate']:.1%} duplicate strings")
-        )
-    if result.stats["len_p95"] < 20:
-        result.alerts.append(Alert("info", "short_text", "95th-percentile length under 20 chars"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
     if lang_counts and len(lang_counts) > 3:
         result.alerts.append(
             Alert("info", "multilingual", f"{len(lang_counts)} languages detected in sample")
@@ -405,6 +426,7 @@ def _profile_text_series(
                 f"{quality['boilerplate_rate']:.1%} rows start with boilerplate ('image of', …)",
             )
         )
+    _emit_common_alerts(result)
     return result
 
 
@@ -444,12 +466,9 @@ def _profile_categorical_series(column: str, s: "pl.Series") -> ProfileResult:
     }
     result.extras = {"top_values": top_values, "singletons": singletons}
 
-    if top_rate > _CARD_WARN:
-        result.alerts.append(Alert("warn", "imbalance", f"top value is {top_rate:.1%} of rows"))
     if cardinality and singletons / cardinality > 0.5:
         result.alerts.append(Alert("info", "long_tail", f"{singletons} singleton categories"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -606,7 +625,6 @@ def profile_columns(
 
 def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
     import numpy as np
-    from scipy import stats as scs
 
     arr_all: list[float] = []
     n = 0
@@ -628,42 +646,9 @@ def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
 
     a = np.asarray(arr_all, dtype=float)
     result.n_unique = int(np.unique(a).size)
-    q1, q3 = np.quantile(a, [0.25, 0.75])
-    iqr = q3 - q1
-    outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
-    skew = float(scs.skew(a)) if a.size > 2 else 0.0
-    kurt = float(scs.kurtosis(a)) if a.size > 3 else 0.0
+    result.stats, result.extras = _numeric_stats(a)
 
-    result.stats = {
-        "min": float(a.min()),
-        "max": float(a.max()),
-        "mean": float(a.mean()),
-        "median": float(np.median(a)),
-        "std": float(a.std(ddof=1)) if a.size > 1 else 0.0,
-        "q1": float(q1),
-        "q3": float(q3),
-        "iqr": float(iqr),
-        "skew": skew,
-        "kurtosis": kurt,
-        "n_outliers": int(outlier_mask.sum()),
-        "outlier_rate": float(outlier_mask.mean()),
-        "zero_rate": float((a == 0).mean()),
-    }
-    hist_counts, hist_edges = np.histogram(a, bins=min(40, max(5, int(math.sqrt(a.size)))))
-    result.extras["histogram"] = {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()}
-    sample_idx = np.random.default_rng(42).choice(a.size, size=min(500, a.size), replace=False)
-    result.extras["sample"] = a[np.sort(sample_idx)].tolist()
-
-    if abs(skew) > 2:
-        result.alerts.append(Alert("info", "high_skew", f"skew={skew:+.2f}"))
-    if result.stats["outlier_rate"] > 0.05:
-        result.alerts.append(
-            Alert("warn", "outliers", f"{result.stats['outlier_rate']:.1%} rows beyond 1.5 IQR")
-        )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
-    if result.n_unique == 1:
-        result.alerts.append(Alert("info", "constant", "only one distinct value"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -763,18 +748,11 @@ def _dict_text(column: str, values: Iterable[Any]) -> ProfileResult:
         "sample": sample_strings[:50],
     }
 
-    if result.stats["duplicate_rate"] > 0.2:
-        result.alerts.append(
-            Alert("warn", "duplicates", f"{result.stats['duplicate_rate']:.1%} duplicate strings")
-        )
-    if result.stats["len_p95"] < 20:
-        result.alerts.append(Alert("info", "short_text", "95th-percentile length under 20 chars"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
     if lang_counter and len(lang_counter) > 3:
         result.alerts.append(
             Alert("info", "multilingual", f"{len(lang_counter)} languages detected in sample")
         )
+    _emit_common_alerts(result)
     return result
 
 
@@ -822,12 +800,9 @@ def _dict_categorical(column: str, values: Iterable[Any]) -> ProfileResult:
         "singletons": sum(1 for c in counts.values() if c == 1),
     }
 
-    if top_rate > _CARD_WARN:
-        result.alerts.append(Alert("warn", "imbalance", f"top value is {top_rate:.1%} of rows"))
     if result.extras["singletons"] / len(counts) > 0.5:
         result.alerts.append(
             Alert("info", "long_tail", f"{result.extras['singletons']} singleton categories")
         )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
+    _emit_common_alerts(result)
     return result

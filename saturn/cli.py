@@ -111,72 +111,46 @@ app = typer.Typer(
 console = Console()
 
 
-def _run_full(
-    source: str,
+def _emit_outputs(
+    data,
     *,
-    split: str,
-    config: str | None,
-    seed: int,
     out: Path,
     findings: Path,
     open_browser: bool,
-    llm_spec: list[str] | None = None,
+    render,
+    write,
 ) -> None:
-    console.print(Panel(f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim](full corpus)[/]", border_style="blue"))
-
-    adapter = adapter_for(source, split=split, config=config)
-    console.print(f"[dim]adapter:[/] {type(adapter).__name__}  [dim]→[/] {adapter.source}")
-
-    with console.status("loading dataset", spinner="dots"):
-        df = adapter.load_dataframe()
-    console.print(f"[dim]loaded:[/] {df.height:,} rows × {df.width} cols  [dim]({df.estimated_size('mb'):.1f} MB in memory)[/]")
-
-    with console.status("inferring schema", spinner="dots"):
-        schema = adapter.schema()
-
-    with console.status("profiling columns (vectorised)", spinner="dots"):
-        results = profile_dataframe(df, schema.columns, sample_seed=seed)
-
-    data = assemble(
-        source=adapter.source,
-        row_count=df.height,
-        sampled_rows=df.height,
-        seed=seed,
-        schema=schema.columns,
-        results=results,
-        mode="full",
-    )
-
-    _print_summary(schema.columns, results, df.height)
-
-    _maybe_run_insights(data, llm_spec)
-
-    out_path = render_html(data, out)
-    findings_path = write_findings(data, findings)
+    """Render HTML + write findings + optionally open browser. Same UX in all commands."""
+    out_path = render(data, out)
+    findings_path = write(data, findings)
     console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
     console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
     if open_browser:
         import webbrowser
-
         webbrowser.open(out_path.as_uri())
 
 
-def _run_sampled(
+def _run(
     source: str,
     *,
     split: str,
     config: str | None,
-    sample_size: int,
     seed: int,
     out: Path,
     findings: Path,
     open_browser: bool,
-    llm_spec: list[str] | None = None,
+    llm_spec: list[str] | None,
+    sample_size: int | None,
 ) -> None:
+    """Common pipeline: adapter -> schema -> profile -> assemble -> insights -> emit.
+
+    `sample_size=None` means full-corpus (vectorised polars path); any int
+    switches to reservoir sampling over streamed batches.
+    """
+    mode_label = "full corpus" if sample_size is None else f"sample mode, n={sample_size}"
     console.print(
         Panel(
-            f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim](sample mode, n={sample_size})[/]",
+            f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim]({mode_label})[/]",
             border_style="blue",
         )
     )
@@ -184,46 +158,59 @@ def _run_sampled(
     adapter = adapter_for(source, split=split, config=config)
     console.print(f"[dim]adapter:[/] {type(adapter).__name__}  [dim]→[/] {adapter.source}")
 
-    with console.status("scanning schema", spinner="dots"):
-        schema = adapter.schema()
-
-    row_count = adapter.row_count()
-    if row_count is not None:
-        console.print(f"[dim]rows (reported):[/] {row_count:,}")
-
-    with console.status(f"reservoir sampling (n={sample_size}, seed={seed})", spinner="dots"):
-        sample, seen = reservoir_sample(
-            adapter.iter_batches(batch_size=5_000), n=sample_size, seed=seed
+    if sample_size is None:
+        with console.status("loading dataset", spinner="dots"):
+            df = adapter.load_dataframe()
+        console.print(
+            f"[dim]loaded:[/] {df.height:,} rows × {df.width} cols  "
+            f"[dim]({df.estimated_size('mb'):.1f} MB in memory)[/]"
         )
-    effective_count = row_count if row_count is not None else seen
-    console.print(f"[dim]sampled:[/] {len(sample):,} rows from {seen:,}")
-
-    with console.status("profiling columns", spinner="dots"):
-        results = profile_columns(schema.columns, sample)
+        with console.status("inferring schema", spinner="dots"):
+            schema = adapter.schema()
+        with console.status("profiling columns (vectorised)", spinner="dots"):
+            results = profile_dataframe(df, schema.columns, sample_seed=seed)
+        row_count = df.height
+        sampled_rows = df.height
+        effective_count = df.height
+        mode = "full"
+    else:
+        with console.status("scanning schema", spinner="dots"):
+            schema = adapter.schema()
+        reported = adapter.row_count()
+        if reported is not None:
+            console.print(f"[dim]rows (reported):[/] {reported:,}")
+        with console.status(
+            f"reservoir sampling (n={sample_size}, seed={seed})", spinner="dots"
+        ):
+            sample, seen = reservoir_sample(
+                adapter.iter_batches(batch_size=5_000), n=sample_size, seed=seed
+            )
+        effective_count = reported if reported is not None else seen
+        console.print(f"[dim]sampled:[/] {len(sample):,} rows from {seen:,}")
+        with console.status("profiling columns", spinner="dots"):
+            results = profile_columns(schema.columns, sample)
+        row_count = effective_count
+        sampled_rows = len(sample)
+        mode = "sample"
 
     data = assemble(
         source=adapter.source,
-        row_count=effective_count,
-        sampled_rows=len(sample),
+        row_count=row_count,
+        sampled_rows=sampled_rows,
         seed=seed,
         schema=schema.columns,
         results=results,
-        mode="sample",
+        mode=mode,
     )
 
     _print_summary(schema.columns, results, effective_count)
 
     _maybe_run_insights(data, llm_spec)
 
-    out_path = render_html(data, out)
-    findings_path = write_findings(data, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
-    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(out_path.as_uri())
+    _emit_outputs(
+        data, out=out, findings=findings, open_browser=open_browser,
+        render=render_html, write=write_findings,
+    )
 
 
 def _print_summary(schema: dict[str, str], results, row_count: int | None) -> None:
@@ -269,29 +256,17 @@ def analyze(
              "Example: --llm anthropic --llm openai:gpt-4o-mini",
     ),
 ) -> None:
-    if sample_size:
-        _run_sampled(
-            source,
-            split=split,
-            config=config,
-            sample_size=sample_size,
-            seed=seed,
-            out=out,
-            findings=findings,
-            open_browser=open_browser,
-            llm_spec=llm_spec,
-        )
-    else:
-        _run_full(
-            source,
-            split=split,
-            config=config,
-            seed=seed,
-            out=out,
-            findings=findings,
-            open_browser=open_browser,
-            llm_spec=llm_spec,
-        )
+    _run(
+        source,
+        split=split,
+        config=config,
+        seed=seed,
+        out=out,
+        findings=findings,
+        open_browser=open_browser,
+        llm_spec=llm_spec,
+        sample_size=sample_size,
+    )
 
 
 @app.command(name="huggingface", help="Convenience: analyse a HuggingFace dataset.")
@@ -310,30 +285,17 @@ def huggingface(
         help="provider[:model] to run insight pass. Repeat for primary + critic.",
     ),
 ) -> None:
-    src = f"hf://{repo}"
-    if sample_size:
-        _run_sampled(
-            src,
-            split=split,
-            config=config,
-            sample_size=sample_size,
-            seed=seed,
-            out=out,
-            findings=findings,
-            open_browser=open_browser,
-            llm_spec=llm_spec,
-        )
-    else:
-        _run_full(
-            src,
-            split=split,
-            config=config,
-            seed=seed,
-            out=out,
-            findings=findings,
-            open_browser=open_browser,
-            llm_spec=llm_spec,
-        )
+    _run(
+        f"hf://{repo}",
+        split=split,
+        config=config,
+        seed=seed,
+        out=out,
+        findings=findings,
+        open_browser=open_browser,
+        llm_spec=llm_spec,
+        sample_size=sample_size,
+    )
 
 
 @app.command(
@@ -425,15 +387,10 @@ def compare(
 
     _maybe_run_compare_insights(report, llm_spec)
 
-    out_path = render_compare_html(report, out)
-    findings_path = write_compare_findings(report, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
-    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(out_path.as_uri())
+    _emit_outputs(
+        report, out=out, findings=findings, open_browser=open_browser,
+        render=render_compare_html, write=write_compare_findings,
+    )
 
 
 def _print_compare_summary(report) -> None:
