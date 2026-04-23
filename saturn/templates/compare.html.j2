@@ -183,7 +183,7 @@
               <div class="d">Δ</div>
               <div></div>
             </div>
-            {% for key, a_val, b_val, d_val, note in col.delta | delta_rows %}
+            {% for key, a_val, b_val, d_val, note in col.delta | delta_rows(col.kind) %}
               <div class="delta-row">
                 <div class="key">{{ key }}</div>
                 <div class="a-val">{{ a_val | num }}</div>
