@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -19,6 +19,9 @@ from .charts import (
     language_chart,
 )
 from .profilers import ProfileResult
+
+if TYPE_CHECKING:
+    from .insights import InsightBundle
 
 
 @dataclass
@@ -45,9 +48,10 @@ class ReportData:
     correlation_chart_html: str | None = None
     language_counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    insight_bundle: "InsightBundle | None" = None
 
     def to_findings(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "saturn_version": __version__,
             "meta": {
                 "source": self.meta.source,
@@ -62,6 +66,9 @@ class ReportData:
             "notes": self.notes,
             "columns": [r.to_dict() for r in self.results],
         }
+        if self.insight_bundle is not None:
+            out["insights"] = self.insight_bundle.to_dict()
+        return out
 
 
 def assemble(

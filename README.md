@@ -37,6 +37,10 @@ saturn compare hf://user/a hf://user/b
 
 # Opt-in streaming sample when full load is too heavy
 saturn analyze big-dataset.parquet --sample 5000
+
+# Opt-in LLM insight pass (primary + optional catfish-critic)
+saturn analyze data.csv --llm anthropic
+saturn analyze data.csv --llm anthropic:claude-sonnet-4-6 --llm openai:gpt-4o-mini
 ```
 
 ## Output
@@ -78,9 +82,15 @@ Running `saturn compare lukeslp/bluesky-alt-text --by source_mode` on the full 4
 
 The **+79 chars** on firehose vs curated was the non-obvious finding — the curated 489-account population writes *shorter* alt text than the broader stream. Worth a Concadia-style readability follow-up.
 
+## LLM insight pass (opt-in)
+
+Pass `--llm provider[:model]` on `analyze` or `huggingface` to layer a narrated insight pass on top of the deterministic stats. Pass the flag twice and the second provider plays catfish-critic: it reviews the first model's narrative against the same evidence and returns `agree`/`disagree`/`partial`. Insights land in both the HTML report and the JSON findings (key: `insights`). The pass fails open — provider errors or missing API keys never block the deterministic output; they are recorded in `insights.errors` and saturn exits 0.
+
+Requires `~/shared/llm_providers` on `PYTHONPATH` (the unified provider gateway). Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
+
 ## Status
 
-Phase 1 (stats + HTML + JSON), Phase 4 (compare mode, curated-vs-firehose diff), and Phase 5 (Flask viewer on port 5043) shipping. Phase 2 (`--llm` insight pass with catfish critic) and Phase 3 (BERTopic clustering) on the roadmap.
+Phase 1 (stats + HTML + JSON), Phase 2 (`--llm` insight pass with catfish critic, analyze/huggingface), Phase 4 (compare mode, curated-vs-firehose diff), and Phase 5 (Flask viewer on port 5043) shipping. Phase 2.5 (compare-mode insights) and Phase 3 (BERTopic clustering) on the roadmap.
 
 ## License
 

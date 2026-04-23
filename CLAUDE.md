@@ -109,12 +109,13 @@ Three commands (`analyze`, `huggingface`, `compare`) plus `version`. `_run_full`
 ## Roadmap (what's shipping vs. what's planned)
 
 - ✅ **Phase 1** — stats pass, HTML, JSON (shipped)
-- ✅ **Phase 4** — compare mode, divergence summary, streaming fallback (shipped)
+- ✅ **Phase 2** — `--llm provider[:model]` insight pass with catfish-critic (analyze/huggingface)
+- ✅ **Phase 4** — compare mode, divergence summary, streaming fallback
 - ✅ **Phase 5** — Flask viewer on port 5043 (`saturn serve`), read-only, WCAG 2.2 AA
-- 🔜 **Phase 2** — `--llm` insight pass with catfish-critic structured debate (multi-provider via `~/shared/llm_providers`)
+- 🔜 **Phase 2.5** — compare-mode insight pass (pair evidence + delta-aware prompts)
 - 🔜 **Phase 3** — BERTopic clustering via the `[nlp]` extra
 
-When working on 2/3, read the existing `ReportData.to_findings()` contract first — it is the interchange format everything downstream will key off. The viewer already serves whatever lands in that JSON verbatim via `/api/findings/<id>`, so Phase 2 insights appear in the viewer automatically once the key is added.
+The `ReportData.to_findings()` contract is the interchange format everything downstream keys off. The viewer serves it verbatim via `/api/findings/<id>` — phase 2 insights appear in the viewer automatically once the key is populated.
 
 ## Known gotchas
 

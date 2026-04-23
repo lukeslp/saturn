@@ -28,6 +28,49 @@ except ImportError:  # [web] extra not installed
     create_app = None
     VIEWER_DEFAULT_PORT = 5043
 
+try:
+    from .llm.engine import run_insights
+    from .llm.gateway import parse_provider_spec
+    from .llm.keys import MissingKeyError, load_api_keys
+    _LLM_AVAILABLE = True
+except ImportError:  # ~/shared/llm_providers not on PYTHONPATH
+    run_insights = None
+    parse_provider_spec = None
+    load_api_keys = None
+
+    class MissingKeyError(RuntimeError):  # type: ignore[no-redef]
+        pass
+
+    _LLM_AVAILABLE = False
+
+
+def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
+    """Populate `data.insight_bundle` when --llm was passed. Fail-open throughout."""
+    if not llm_spec:
+        return
+    if not _LLM_AVAILABLE:
+        console.print(
+            "[red]--llm requires ~/shared on PYTHONPATH[/] (see docs/DEPLOY.md)"
+        )
+        return
+    try:
+        specs = [parse_provider_spec(s) for s in llm_spec]
+        keys = load_api_keys([s.provider for s in specs])
+    except (MissingKeyError, ValueError) as e:
+        console.print(f"[yellow]insight pass skipped:[/] {e}")
+        return
+
+    label = ", ".join(s.label() for s in specs)
+    with console.status(f"insight pass ({label})", spinner="dots"):
+        bundle = run_insights(data, specs=specs, api_keys=keys)
+    data.insight_bundle = bundle
+
+    if bundle.errors:
+        console.print(
+            f"[yellow]insight pass completed with {len(bundle.errors)} error(s)[/]"
+        )
+    console.print(f"[green]✓[/] insight pass: {len(bundle.insights)} insight(s)")
+
 app = typer.Typer(
     name="saturn",
     help="Dataset dissector. Stats pass is free and deterministic; language-model insight is opt-in.",
@@ -46,6 +89,7 @@ def _run_full(
     out: Path,
     findings: Path,
     open_browser: bool,
+    llm_spec: list[str] | None = None,
 ) -> None:
     console.print(Panel(f"[bold]saturn[/bold] v{__version__}  —  {source}  [dim](full corpus)[/]", border_style="blue"))
 
@@ -74,6 +118,8 @@ def _run_full(
 
     _print_summary(schema.columns, results, df.height)
 
+    _maybe_run_insights(data, llm_spec)
+
     out_path = render_html(data, out)
     findings_path = write_findings(data, findings)
     console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
@@ -95,6 +141,7 @@ def _run_sampled(
     out: Path,
     findings: Path,
     open_browser: bool,
+    llm_spec: list[str] | None = None,
 ) -> None:
     console.print(
         Panel(
@@ -134,6 +181,8 @@ def _run_sampled(
     )
 
     _print_summary(schema.columns, results, effective_count)
+
+    _maybe_run_insights(data, llm_spec)
 
     out_path = render_html(data, out)
     findings_path = write_findings(data, findings)
@@ -182,6 +231,12 @@ def analyze(
     split: str | None = typer.Option(None, "--split", help="HF dataset split (default: concatenate every split)"),
     config: str | None = typer.Option(None, "--config", help="HF dataset config name"),
     open_browser: bool = typer.Option(False, "--open", help="open report in browser after run"),
+    llm_spec: list[str] = typer.Option(
+        None,
+        "--llm",
+        help="provider[:model] to run insight pass. Repeat for primary + critic. "
+             "Example: --llm anthropic --llm openai:gpt-4o-mini",
+    ),
 ) -> None:
     if sample_size:
         _run_sampled(
@@ -193,6 +248,7 @@ def analyze(
             out=out,
             findings=findings,
             open_browser=open_browser,
+            llm_spec=llm_spec,
         )
     else:
         _run_full(
@@ -203,6 +259,7 @@ def analyze(
             out=out,
             findings=findings,
             open_browser=open_browser,
+            llm_spec=llm_spec,
         )
 
 
@@ -216,6 +273,11 @@ def huggingface(
     split: str | None = typer.Option(None, "--split", help="HF split (default: concat every split)"),
     config: str | None = typer.Option(None, "--config"),
     open_browser: bool = typer.Option(False, "--open"),
+    llm_spec: list[str] = typer.Option(
+        None,
+        "--llm",
+        help="provider[:model] to run insight pass. Repeat for primary + critic.",
+    ),
 ) -> None:
     src = f"hf://{repo}"
     if sample_size:
@@ -228,6 +290,7 @@ def huggingface(
             out=out,
             findings=findings,
             open_browser=open_browser,
+            llm_spec=llm_spec,
         )
     else:
         _run_full(
@@ -238,6 +301,7 @@ def huggingface(
             out=out,
             findings=findings,
             open_browser=open_browser,
+            llm_spec=llm_spec,
         )
 
 
