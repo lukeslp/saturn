@@ -53,8 +53,12 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
 ]
+web = [
+    "flask>=3.0",
+    "werkzeug>=3.0",
+]
 all = [
-    "saturn-dissect[nlp,llm,dev]",
+    "saturn-dissect[nlp,llm,web,dev]",
 ]
 
 [project.scripts]
