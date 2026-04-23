@@ -86,3 +86,25 @@ def test_index_when_directory_empty(tmp_path):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "No findings" in body or "no findings" in body.lower()
+
+
+def test_profile_view_renders_columns(client, findings_dir):
+    resp = client.get("/view/demo")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "hf://demo/set" in body
+    assert 'scope="col"' in body
+
+
+def test_profile_view_deep_links_each_column(client):
+    resp = client.get("/view/demo")
+    body = resp.get_data(as_text=True)
+    assert 'id="col-a"' in body
+
+
+def test_profile_view_exposes_json_via_api(client):
+    resp = client.get("/api/findings/demo")
+    assert resp.status_code == 200
+    assert resp.is_json
+    data = resp.get_json()
+    assert data["meta"]["source"] == "hf://demo/set"
