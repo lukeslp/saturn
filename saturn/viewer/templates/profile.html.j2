@@ -1,93 +1,168 @@
 {% extends "base.html.j2" %}
 {% block title %}{{ doc.id }} — saturn{% endblock %}
 {% block main %}
-<nav aria-label="Breadcrumb"><a href="{{ url_for('index') }}">← all findings</a></nav>
-<h1>{{ doc.meta.source }}</h1>
-<p class="muted">
-  <strong>{{ "{:,}".format(doc.meta.row_count or 0) }}</strong> rows &middot;
-  <strong>{{ doc.columns | length }}</strong> columns &middot;
-  generated {{ doc.meta.generated_at }} &middot;
-  <a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a>
-</p>
 
-{% if doc.raw.insights %}
-<section aria-labelledby="insights-heading">
-  <h2 id="insights-heading">Insights <small class="muted">({{ doc.raw.insights.providers | join(", ") }})</small></h2>
-  <p class="muted">Model-generated narrative. Stats below are what saturn measured.</p>
-  {% for ins in doc.raw.insights.insights %}
-  <article>
-    <header>
-      <strong>{% if ins.scope == "dataset" %}Dataset{% else %}<a href="#col-{{ ins.target }}">{{ ins.target }}</a>{% endif %}</strong>
-      <span class="badge">{{ ins.confidence }}</span>
-      <span class="muted">{{ ins.model }}</span>
-    </header>
-    <p>{{ ins.narrative }}</p>
-    {% if ins.critiques %}
-    <details>
-      <summary>Critiques ({{ ins.critiques | length }})</summary>
-      <ul>
-      {% for c in ins.critiques %}
-        <li><strong>{{ c.reviewer_model }}</strong>: <em>{{ c.verdict }}</em> — {{ c.reason }}</li>
-      {% endfor %}
-      </ul>
-    </details>
-    {% endif %}
-  </article>
-  {% endfor %}
+{% set insights = doc.raw.get('insights', {}) %}
+{% set insight_items = insights.get('insights', []) %}
+{% set dataset_insight = insight_items | selectattr('scope', 'equalto', 'dataset') | first %}
+{% set column_insights = insight_items | selectattr('scope', 'equalto', 'column') | list %}
+{% set col_insight_by_name = {} %}
+{% for ci in column_insights %}{% if col_insight_by_name.update({ci.target: ci}) %}{% endif %}{% endfor %}
+
+<header class="finding-head">
+  <p class="breadcrumb"><a href="{{ url_for('index') }}">← all readings</a></p>
+  <h1>{{ doc.id.replace('-', ' ').replace('_', ' ') }}</h1>
+  <div class="finding-meta">
+    <span>source&nbsp;<strong>{{ doc.meta.source }}</strong></span>
+    <span><strong>{{ "{:,}".format(doc.meta.row_count or 0) }}</strong>&nbsp;rows</span>
+    <span><strong>{{ doc.columns | length }}</strong>&nbsp;columns</span>
+    <span>profiled&nbsp;<strong>{{ doc.meta.generated_at[:10] }}</strong></span>
+    <span><a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a></span>
+  </div>
+</header>
+
+<section class="narrative">
+  <h2>Reading</h2>
+  {% if dataset_insight %}
+    <div class="summary-card">
+      <div class="summary-meta">
+        <span>dataset summary · {{ dataset_insight.confidence }} confidence</span>
+        <span class="cite">{{ dataset_insight.model }}</span>
+      </div>
+      <p>{{ dataset_insight.narrative }}</p>
+      {% if dataset_insight.evidence_keys %}
+        <p class="cite">citing: {{ dataset_insight.evidence_keys | join(' · ') }}</p>
+      {% endif %}
+      {% if dataset_insight.critiques %}
+        <div class="critiques">
+          {% for c in dataset_insight.critiques %}
+            <div>
+              <span class="verdict verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+              <strong>{{ c.reviewer_model }}:</strong> {{ c.reason }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="missing">
+      <p>No plain-language summary on this reading yet. A language model can turn saturn's measurements into prose — it never sees raw rows, only per-column aggregates already in the findings JSON.</p>
+      <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
+        <button class="btn" type="submit">Generate summary with {{ default_llm }}</button>
+        <span class="checkbox" style="margin-left: 1rem;">
+          {{ 'fail-open; no data leaves as rows' }}
+        </span>
+      </form>
+    </div>
+  {% endif %}
 </section>
-{% endif %}
 
-<section aria-labelledby="schema-heading">
-  <h2 id="schema-heading">Schema</h2>
-  <table>
-    <caption class="visually-hidden">Per-column summary</caption>
+<aside class="aside" aria-labelledby="at-a-glance">
+  <div class="card">
+    <h3 id="at-a-glance">at a glance</h3>
+    <dl>
+      <dt>mode</dt><dd>{{ doc.meta.mode }}</dd>
+      <dt>rows</dt><dd>{{ "{:,}".format(doc.meta.row_count or 0) }}</dd>
+      <dt>sampled</dt><dd>{{ "{:,}".format(doc.meta.sampled_rows or 0) }}</dd>
+      <dt>columns</dt><dd>{{ doc.columns | length }}</dd>
+      <dt>text</dt><dd>{{ (doc.columns | selectattr('kind', 'equalto', 'text') | list | length) }}</dd>
+      <dt>numeric</dt><dd>{{ (doc.columns | selectattr('kind', 'equalto', 'numeric') | list | length) }}</dd>
+      <dt>categorical</dt><dd>{{ (doc.columns | selectattr('kind', 'equalto', 'categorical') | list | length) }}</dd>
+    </dl>
+    {% set lc = doc.raw.get('language_counts', {}) %}
+    {% if lc %}
+      {% set lc_total = lc.values() | sum %}
+      {% set sorted_langs = lc.items() | list | sort(attribute=1, reverse=true) %}
+      <div class="langs">
+        <h3 style="margin-bottom: calc(var(--step) * 1);">languages</h3>
+        <div class="lang-bar" role="presentation">
+          {% for lang, n in sorted_langs[:6] %}
+            <span style="width: {{ (100 * n / lc_total) }}%" title="{{ lang }}: {{ n }}"></span>
+          {% endfor %}
+        </div>
+        <dl style="margin-top: calc(var(--step) * 1);">
+          {% for lang, n in sorted_langs[:5] %}
+            <dt>{{ lang }}</dt><dd>{{ "{:.1f}%".format(100 * n / lc_total) }}</dd>
+          {% endfor %}
+        </dl>
+      </div>
+    {% endif %}
+  </div>
+</aside>
+
+<section class="schema" aria-labelledby="schema-heading">
+  <header>
+    <h2 id="schema-heading">Schema</h2>
+    <span class="sub">{{ doc.columns | length }} columns</span>
+  </header>
+  <table class="schema-table">
+    <caption class="visually-hidden">Per-column summary. Click column name to jump to its detail.</caption>
     <thead>
       <tr>
         <th scope="col"><button type="button" data-sort="column">Column</button></th>
         <th scope="col"><button type="button" data-sort="kind">Kind</button></th>
-        <th scope="col"><button type="button" data-sort="null_rate">Null %</button></th>
-        <th scope="col"><button type="button" data-sort="n_unique">Unique</button></th>
+        <th scope="col" class="num"><button type="button" data-sort="null_rate">Null %</button></th>
+        <th scope="col" class="num"><button type="button" data-sort="n_unique">Unique</button></th>
         <th scope="col">Alerts</th>
       </tr>
     </thead>
     <tbody id="columns-tbody">
-    {% for c in doc.columns %}
-      <tr data-column="{{ c.column }}">
-        <th scope="row"><a href="#col-{{ c.column }}">{{ c.column }}</a></th>
-        <td>{{ c.kind }}</td>
-        <td data-value="{{ (c.null_rate or 0) * 100 }}">{{ "%.1f%%" | format((c.null_rate or 0) * 100) }}</td>
-        <td data-value="{{ c.n_unique if c.n_unique is not none else -1 }}">{{ c.n_unique if c.n_unique is not none else "—" }}</td>
-        <td>
-          {% for a in c.alerts %}
-            <span class="badge alert-{{ a.level }}" title="{{ a.message }}">{{ a.code }}</span>
-          {% endfor %}
-        </td>
-      </tr>
-    {% endfor %}
+      {% for c in doc.columns %}
+        <tr data-column="{{ c.column }}">
+          <td class="col-name"><a href="#col-{{ c.column }}">{{ c.column }}</a></td>
+          <td>{{ c.kind }}</td>
+          <td class="num" data-value="{{ (c.null_rate or 0) * 100 }}">{{ "%.1f%%" | format((c.null_rate or 0) * 100) }}</td>
+          <td class="num" data-value="{{ c.n_unique if c.n_unique is not none else -1 }}">{{ "{:,}".format(c.n_unique) if c.n_unique is not none else "—" }}</td>
+          <td>
+            <div class="alerts-cell">
+              {% for a in c.alerts %}
+                <span class="alert alert-{{ a.level }}" title="{{ a.message }}">{{ a.code }}</span>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
     </tbody>
   </table>
 </section>
 
 {% for c in doc.columns %}
-<section id="col-{{ c.column }}" aria-labelledby="col-{{ c.column }}-heading">
-  <h3 id="col-{{ c.column }}-heading">{{ c.column }} <small class="muted">({{ c.kind }})</small></h3>
-  <dl>
-    <dt>n</dt><dd>{{ c.n }}</dd>
-    <dt>nulls</dt><dd>{{ c.n_null }} ({{ "%.1f%%" | format((c.null_rate or 0) * 100) }})</dd>
-    <dt>unique</dt><dd>{{ c.n_unique if c.n_unique is not none else "—" }}</dd>
-    {% for k, v in c.stats.items() %}
-      <dt>{{ k }}</dt><dd>{{ v }}</dd>
-    {% endfor %}
-  </dl>
-  {% if c.alerts %}
-  <p>
-    {% for a in c.alerts %}
-      <span class="badge alert-{{ a.level }}">{{ a.code }}</span> <span class="muted">{{ a.message }}</span>{% if not loop.last %}<br>{% endif %}
-    {% endfor %}
-  </p>
-  {% endif %}
-</section>
+  <section id="col-{{ c.column }}" class="column-detail" aria-labelledby="col-{{ c.column }}-heading">
+    <div class="detail-head">
+      <h3 id="col-{{ c.column }}-heading">{{ c.column }}</h3>
+      <span class="chip">{{ c.kind }}</span>
+      {% if c.alerts %}
+        <span class="alerts-cell">
+          {% for a in c.alerts %}
+            <span class="alert alert-{{ a.level }}">{{ a.code }}</span>
+          {% endfor %}
+        </span>
+      {% endif %}
+    </div>
+    {% set ci = col_insight_by_name.get(c.column) %}
+    {% if ci %}
+      <blockquote class="per-col-summary">
+        {{ ci.narrative }}
+        <span class="author">{{ ci.confidence }} · {{ ci.model }}</span>
+      </blockquote>
+    {% endif %}
+    <dl>
+      <dt>n</dt><dd>{{ "{:,}".format(c.n) }}</dd>
+      <dt>nulls</dt><dd>{{ "{:,}".format(c.n_null) }} ({{ "%.1f%%" | format((c.null_rate or 0) * 100) }})</dd>
+      <dt>unique</dt><dd>{{ "{:,}".format(c.n_unique) if c.n_unique is not none else "—" }}</dd>
+      {% for k, v in (c.stats or {}).items() %}
+        <dt>{{ k }}</dt>
+        <dd>
+          {% if v is number %}
+            {% if v == (v | int) and v | abs < 1000000 %}{{ "{:,}".format(v | int) }}{% else %}{{ "{:.4g}".format(v) }}{% endif %}
+          {% else %}{{ v }}{% endif %}
+        </dd>
+      {% endfor %}
+    </dl>
+  </section>
 {% endfor %}
 
+{% endblock %}
+{% block foot_extra %}
 <script src="{{ url_for('static', filename='sort.js') }}" defer></script>
 {% endblock %}

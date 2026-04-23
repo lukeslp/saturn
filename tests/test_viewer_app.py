@@ -85,7 +85,8 @@ def test_index_when_directory_empty(tmp_path):
     resp = app.test_client().get("/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "No findings" in body or "no findings" in body.lower()
+    # Empty state copy in the redesigned index
+    assert "No readings yet" in body
 
 
 def test_profile_view_renders_columns(client, findings_dir):
@@ -194,7 +195,9 @@ def test_compare_view_has_caption_and_divergence_summary(client, findings_dir):
     resp = client.get("/view/d2")
     body = resp.get_data(as_text=True)
     assert "Most divergent" in body
-    assert "<caption" in body
+    # Divergence summary is semantic <ol class="dv-list"> in the redesigned view
+    assert 'class="dv-list"' in body
+    assert "mean +2" in body
 
 
 def test_view_rejects_path_traversal_in_id(tmp_path):

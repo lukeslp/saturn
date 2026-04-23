@@ -1,0 +1,45 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ job.kind }} — saturn{% endblock %}
+{% block head_extra %}
+  {% if job.status in ('pending', 'running') %}
+    <meta http-equiv="refresh" content="3">
+  {% elif job.status == 'done' and job.finding_id %}
+    <meta http-equiv="refresh" content="1; url={{ url_for('view', id=job.finding_id) }}">
+  {% endif %}
+{% endblock %}
+{% block main %}
+
+<section class="job-panel" aria-live="polite">
+  <p class="status {{ job.status }}">
+    {% if job.status == 'running' %}now profiling
+    {% elif job.status == 'pending' %}queued
+    {% elif job.status == 'done' %}reading ready
+    {% elif job.status == 'error' %}error
+    {% else %}{{ job.status }}{% endif %}
+    · {{ job.kind }}
+  </p>
+
+  {% if job.status in ('pending', 'running') %}
+    <div class="spinner" role="status" aria-label="Working"></div>
+    <h1>Saturn is reading your dataset.</h1>
+    <p>{{ job.message or 'Starting…' }}</p>
+    <p class="cite" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);">
+      This page refreshes every 3 seconds.
+    </p>
+  {% elif job.status == 'done' %}
+    <h1>Reading ready.</h1>
+    <p>{{ job.message }}</p>
+    <p>
+      <a class="btn" href="{{ url_for('view', id=job.finding_id) }}">Open reading</a>
+    </p>
+  {% elif job.status == 'error' %}
+    <h1>Saturn couldn't finish this one.</h1>
+    <p>{{ job.message or 'See details below.' }}</p>
+    {% if job.error %}
+      <pre class="error-body">{{ job.error }}</pre>
+    {% endif %}
+    <p><a class="btn btn-ghost" href="{{ url_for('index') }}">Back to start</a></p>
+  {% endif %}
+</section>
+
+{% endblock %}
