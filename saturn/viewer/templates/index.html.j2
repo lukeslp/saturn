@@ -1,34 +1,99 @@
 {% extends "base.html.j2" %}
-{% block title %}saturn — findings index{% endblock %}
+{% block title %}saturn — dataset readings{% endblock %}
 {% block main %}
-<h1>Findings</h1>
-{% if docs %}
-<table>
-  <caption class="visually-hidden">All saturn findings on disk</caption>
-  <thead>
-    <tr>
-      <th scope="col">Name</th>
-      <th scope="col">Kind</th>
-      <th scope="col">Source / Labels</th>
-      <th scope="col"><span class="visually-hidden">Action</span></th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for d in docs %}
-    <tr>
-      <th scope="row">{{ d.id }}</th>
-      <td><span class="badge">{{ d.kind.value }}</span></td>
-      <td>
-        {% if d.kind.value == "profile" %}{{ d.meta.source }}
-        {% else %}<strong>{{ d.a_label }}</strong> vs <strong>{{ d.b_label }}</strong>{% endif %}
-      </td>
-      <td><a href="{{ url_for('view', id=d.id) }}">open</a></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p>No findings files in <code>{{ config.SATURN_FINDINGS_DIR }}</code>.</p>
-<p>Run <code>saturn analyze &lt;source&gt;</code> and drop the resulting JSON in that directory.</p>
-{% endif %}
+
+<section class="hero">
+  <p class="eyebrow">dataset dissector · v0.2.0</p>
+  <h1>Point saturn at a dataset. Get a plain-language <em>reading</em> and every number behind it.</h1>
+  <p class="lede">
+    Drop a CSV, JSONL, Parquet, or SQLite file, or paste a HuggingFace repo id.
+    Saturn profiles the whole corpus, then a language model writes up what changed
+    and what's worth a closer look. All statistics are deterministic and machine-readable.
+  </p>
+</section>
+
+<section class="inputs" aria-label="New reading">
+  <form class="input-card" action="{{ url_for('analyze_file') }}" method="post" enctype="multipart/form-data">
+    <div class="label"><span>UPLOAD</span><span class="count">01</span></div>
+    <h2>Local file</h2>
+    <label class="dropzone" id="dropzone" tabindex="0">
+      <span class="subcallout">drop · or · browse</span>
+      <span class="callout" id="dropzone-callout">CSV · JSONL · Parquet · SQLite</span>
+      <span class="filename" id="dropzone-filename" aria-live="polite"></span>
+      <input type="file" name="file" id="file-input" accept=".csv,.jsonl,.ndjson,.parquet,.json,.db,.sqlite,.sqlite3">
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" name="no_llm" value="1">
+      <span>stats only, skip summary</span>
+    </label>
+    <button class="btn" type="submit">Analyze upload</button>
+    <p class="hint">50 MB max. For bigger corpora use the CLI: <code>saturn analyze path/to/file</code>.</p>
+  </form>
+
+  <form class="input-card" action="{{ url_for('analyze_hf_route') }}" method="post">
+    <div class="label"><span>HUGGINGFACE</span><span class="count">02</span></div>
+    <h2>Remote repo</h2>
+    <div class="field">
+      <label for="hf-repo">Repo id</label>
+      <input type="text" id="hf-repo" name="repo" placeholder="user/dataset" required pattern="[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+">
+    </div>
+    <label class="checkbox">
+      <input type="checkbox" name="no_llm" value="1">
+      <span>stats only, skip summary</span>
+    </label>
+    <button class="btn" type="submit">Analyze repo</button>
+    <p class="hint">Loads every split, concatenated. Big repos may take minutes — you'll get a job page to watch.</p>
+  </form>
+</section>
+
+<section class="readings" aria-label="Existing readings">
+  <header>
+    <h2>Readings</h2>
+    <span class="count">{{ "%02d" | format(docs|length) }} files</span>
+  </header>
+  {% if docs %}
+    {% for d in docs %}
+      {% set has_insights = d.raw.get('insights') and d.raw['insights'].get('insights') %}
+      {% set first_insight = has_insights and d.raw['insights']['insights'][0] or None %}
+      <article class="reading">
+        <div>
+          <div class="numeral">{{ "%02d" | format(loop.index) }} / {{ "%02d" | format(docs|length) }}</div>
+          <div class="stamps">
+            <span class="stamp">{{ d.kind.value }}</span>
+            {% if has_insights %}<span class="stamp stamp--insight">reading</span>{% endif %}
+          </div>
+        </div>
+        <div>
+          <h3><a href="{{ url_for('view', id=d.id) }}">{{ d.id.replace('-', ' ').replace('_', ' ') }}</a></h3>
+          <p class="source">
+            {% if d.kind.value == 'profile' %}
+              {{ d.meta.source }} · {{ "{:,}".format(d.meta.row_count or 0) }} rows
+            {% else %}
+              {{ d.a_label }} ({{ "{:,}".format(d.raw.a.row_count or 0) }}) vs {{ d.b_label }} ({{ "{:,}".format(d.raw.b.row_count or 0) }})
+            {% endif %}
+          </p>
+          {% if first_insight %}
+            <p class="preview">{{ first_insight.narrative }}</p>
+          {% else %}
+            <p class="preview" style="color: var(--muted);">
+              No plain-language summary yet.
+              <form action="{{ url_for('backfill', id=d.id) }}" method="post" style="display: inline; margin-left: 0.5rem;">
+                <button class="btn btn-ghost btn-small" type="submit">Generate summary</button>
+              </form>
+            </p>
+          {% endif %}
+        </div>
+        <a class="open" href="{{ url_for('view', id=d.id) }}">Open</a>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <p>No readings yet. Upload a file or point at a HuggingFace repo above.</p>
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}
+{% block foot_extra %}
+<script src="{{ url_for('static', filename='dropzone.js') }}" defer></script>
 {% endblock %}

@@ -70,6 +70,85 @@ class ReportData:
             out["insights"] = self.insight_bundle.to_dict()
         return out
 
+    @classmethod
+    def from_findings(cls, payload: dict[str, Any]) -> "ReportData":
+        """Rebuild a ReportData from a findings JSON payload.
+
+        Enables the backfill flow: load findings from disk, run the LLM pass
+        against the same aggregates the viewer already has, write insights back.
+        Charts and correlation matrix are not restored — they're expensive
+        render artifacts, not contract data. The insight pass only needs
+        `results` + `meta`.
+        """
+        from .profilers import Alert, ProfileResult
+
+        meta_raw = payload.get("meta", {})
+        meta = DatasetMeta(
+            source=meta_raw.get("source", ""),
+            row_count=meta_raw.get("row_count"),
+            sampled_rows=meta_raw.get("sampled_rows", 0),
+            seed=meta_raw.get("seed", 42),
+            mode=meta_raw.get("mode", "full"),
+            generated_at=meta_raw.get("generated_at", ""),
+        )
+        results: list[ProfileResult] = []
+        for col in payload.get("columns", []):
+            alerts = [
+                Alert(level=a["level"], code=a["code"], message=a["message"])
+                for a in col.get("alerts", [])
+            ]
+            results.append(
+                ProfileResult(
+                    column=col["column"],
+                    kind=col["kind"],
+                    n=col.get("n", 0),
+                    n_null=col.get("n_null", 0),
+                    n_unique=col.get("n_unique"),
+                    stats=col.get("stats", {}) or {},
+                    extras=col.get("extras", {}) or {},
+                    alerts=alerts,
+                )
+            )
+        data = cls(
+            meta=meta,
+            schema=payload.get("schema", {}),
+            results=results,
+            language_counts=payload.get("language_counts", {}) or {},
+            notes=payload.get("notes", []) or [],
+        )
+        if "insights" in payload:
+            from .insights import Critique, Insight, InsightBundle
+
+            raw = payload["insights"]
+            insights = []
+            for ins in raw.get("insights", []):
+                critiques = [
+                    Critique(
+                        reviewer_model=c["reviewer_model"],
+                        verdict=c["verdict"],
+                        reason=c["reason"],
+                    )
+                    for c in ins.get("critiques", [])
+                ]
+                insights.append(
+                    Insight(
+                        scope=ins["scope"],
+                        target=ins["target"],
+                        narrative=ins["narrative"],
+                        confidence=ins["confidence"],
+                        evidence_keys=ins.get("evidence_keys", []),
+                        model=ins["model"],
+                        critiques=critiques,
+                    )
+                )
+            data.insight_bundle = InsightBundle(
+                providers=raw.get("providers", []),
+                insights=insights,
+                total_usage=raw.get("total_usage", {}),
+                errors=raw.get("errors", []),
+            )
+        return data
+
 
 def assemble(
     source: str,

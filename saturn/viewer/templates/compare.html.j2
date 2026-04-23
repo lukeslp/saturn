@@ -1,126 +1,158 @@
 {% extends "base.html.j2" %}
 {% block title %}{{ doc.a_label }} vs {{ doc.b_label }} — saturn{% endblock %}
 {% block main %}
-<nav aria-label="Breadcrumb"><a href="{{ url_for('index') }}">← all findings</a></nav>
-<h1>{{ doc.a_label }} <small class="muted">vs</small> {{ doc.b_label }}</h1>
-<p class="muted">
-  <strong>{{ doc.a_label }}:</strong> {{ "{:,}".format(doc.raw.a.row_count) }} rows &middot;
-  <strong>{{ doc.b_label }}:</strong> {{ "{:,}".format(doc.raw.b.row_count) }} rows &middot;
-  generated {{ doc.raw.generated_at }} &middot;
-  <a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a>
-</p>
 
-{% if doc.raw.insights %}
-<section aria-labelledby="insights-heading">
-  <h2 id="insights-heading">Insights <small class="muted">({{ doc.raw.insights.providers | join(", ") }})</small></h2>
-  <p class="muted">Model-generated narrative. Deltas below are what saturn measured.</p>
-  {% for ins in doc.raw.insights.insights %}
-  <article>
-    <header>
-      <strong>{% if ins.target == "__global__" %}Dataset{% else %}<a href="#col-{{ ins.target }}">{{ ins.target }}</a>{% endif %}</strong>
-      <span class="badge">{{ ins.confidence }}</span>
-      <span class="muted">{{ ins.model }}</span>
-    </header>
-    <p>{{ ins.narrative }}</p>
-    {% if ins.critiques %}
-    <details>
-      <summary>Critiques ({{ ins.critiques | length }})</summary>
-      <ul>
-        {% for c in ins.critiques %}<li><strong>{{ c.reviewer_model }}</strong>: <em>{{ c.verdict }}</em>. {{ c.reason }}</li>{% endfor %}
-      </ul>
-    </details>
-    {% endif %}
-  </article>
-  {% endfor %}
+{% set insights = doc.raw.get('insights', {}) %}
+{% set insight_items = insights.get('insights', []) %}
+{% set compare_global = insight_items | selectattr('target', 'equalto', '__global__') | first %}
+
+<header class="finding-head">
+  <p class="breadcrumb"><a href="{{ url_for('index') }}">← all readings</a></p>
+  <h1>{{ doc.a_label }} <em style="color: var(--muted); font-style: normal; font-variation-settings: 'opsz' 144, 'wght' 300;">vs</em> {{ doc.b_label }}</h1>
+  <div class="finding-meta">
+    <span><strong>{{ doc.a_label }}</strong>: {{ "{:,}".format(doc.raw.a.row_count or 0) }} rows</span>
+    <span><strong>{{ doc.b_label }}</strong>: {{ "{:,}".format(doc.raw.b.row_count or 0) }} rows</span>
+    <span><strong>{{ doc.raw.columns | length }}</strong> columns compared</span>
+    <span>generated <strong>{{ doc.raw.generated_at[:10] }}</strong></span>
+    <span><a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a></span>
+  </div>
+</header>
+
+<section class="narrative">
+  <h2>Reading</h2>
+  {% if compare_global %}
+    <div class="summary-card">
+      <div class="summary-meta">
+        <span>compare summary · {{ compare_global.confidence }} confidence</span>
+        <span class="cite">{{ compare_global.model }}</span>
+      </div>
+      <p>{{ compare_global.narrative }}</p>
+      {% if compare_global.evidence_keys %}
+        <p class="cite">citing: {{ compare_global.evidence_keys | join(' · ') }}</p>
+      {% endif %}
+      {% if compare_global.critiques %}
+        <div class="critiques">
+          {% for c in compare_global.critiques %}
+            <div>
+              <span class="verdict verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+              <strong>{{ c.reviewer_model }}:</strong> {{ c.reason }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="missing">
+      <p>No plain-language summary on this compare yet. The insight pass walks the most-divergent columns and writes up what changed between the two slices.</p>
+      <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
+        <button class="btn" type="submit">Generate compare summary with {{ default_llm }}</button>
+      </form>
+    </div>
+  {% endif %}
 </section>
-{% endif %}
+
+<aside class="aside" aria-labelledby="sides-at-a-glance">
+  <div class="card">
+    <h3 id="sides-at-a-glance">side by side</h3>
+    <dl>
+      <dt>rows A</dt><dd>{{ "{:,}".format(doc.raw.a.row_count or 0) }}</dd>
+      <dt>rows B</dt><dd>{{ "{:,}".format(doc.raw.b.row_count or 0) }}</dd>
+      <dt>columns</dt><dd>{{ doc.raw.columns | length }}</dd>
+      <dt>divergences</dt><dd>{{ doc.raw.divergences | length }}</dd>
+    </dl>
+  </div>
+</aside>
 
 {% if doc.raw.divergences %}
-<section aria-labelledby="div-heading">
-  <h2 id="div-heading">Most divergent columns</h2>
-  <table>
-    <caption class="visually-hidden">Columns ranked by composite divergence score</caption>
-    <thead>
-      <tr>
-        <th scope="col">Column</th>
-        <th scope="col">Kind</th>
-        <th scope="col">Score</th>
-        <th scope="col">Signals</th>
-      </tr>
-    </thead>
-    <tbody>
+<section class="divergence" aria-labelledby="div-heading">
+  <header style="display: flex; justify-content: space-between; align-items: baseline; padding-bottom: calc(var(--step) * 1); border-bottom: 1px solid var(--ink); margin-bottom: calc(var(--step) * 2);">
+    <h2 id="div-heading" style="font-family: var(--font-display); font-variation-settings: 'opsz' 72, 'wght' 650; font-size: var(--size-h2); margin: 0; letter-spacing: -0.015em;">Most divergent columns</h2>
+    <span style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);">ranked by composite score</span>
+  </header>
+  <ol class="dv-list">
     {% for d in doc.raw.divergences %}
-      <tr>
-        <th scope="row"><a href="#col-{{ d.column }}">{{ d.column }}</a></th>
-        <td>{{ d.kind }}</td>
-        <td>{{ "%.2f" | format(d.score) }}</td>
-        <td>{{ d.signals | join(", ") }}</td>
-      </tr>
+      <li class="dv-item">
+        <div class="score">{{ "%.2f" | format(d.score) }}</div>
+        <div>
+          <a class="col-name" href="#col-{{ d.column }}">{{ d.column }}</a>
+          <div class="signals">
+            {% for s in d.signals %}<span>{{ s }}</span>{% endfor %}
+          </div>
+        </div>
+        <div class="chip" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 2px 8px; border: 1px solid var(--rule-strong); border-radius: 2px;">{{ d.kind }}</div>
+      </li>
     {% endfor %}
-    </tbody>
-  </table>
+  </ol>
 </section>
 {% endif %}
 
 {% for c in doc.raw.columns %}
-<section id="col-{{ c.column }}" aria-labelledby="col-{{ c.column }}-heading">
-  <h3 id="col-{{ c.column }}-heading">{{ c.column }} <small class="muted">({{ c.kind }})</small></h3>
-  <table>
-    <caption class="visually-hidden">Side-by-side stats for {{ c.column }}</caption>
-    <thead>
-      <tr>
-        <th scope="col">Stat</th>
-        <th scope="col">{{ doc.a_label }}</th>
-        <th scope="col">{{ doc.b_label }}</th>
-        <th scope="col">Δ</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <th scope="row">n</th>
-        <td>{{ "{:,}".format(c.a.n) if c.a else "—" }}</td>
-        <td>{{ "{:,}".format(c.b.n) if c.b else "—" }}</td>
-        <td>—</td>
-      </tr>
-      <tr>
-        <th scope="row">null rate</th>
-        <td>{{ "%.1f%%" | format((c.a.null_rate or 0) * 100) if c.a else "—" }}</td>
-        <td>{{ "%.1f%%" | format((c.b.null_rate or 0) * 100) if c.b else "—" }}</td>
-        <td>{% if "null_rate_delta" in c.delta %}{{ "%+.1f%%" | format(c.delta["null_rate_delta"] * 100) }}{% else %}—{% endif %}</td>
-      </tr>
-      <tr>
-        <th scope="row">unique</th>
-        <td>{{ "{:,}".format(c.a.n_unique) if c.a and c.a.n_unique is not none else "—" }}</td>
-        <td>{{ "{:,}".format(c.b.n_unique) if c.b and c.b.n_unique is not none else "—" }}</td>
-        <td>—</td>
-      </tr>
-      {% for k, v in c.delta.items() if k.endswith("_delta") and k != "null_rate_delta" %}
-      <tr>
-        <th scope="row">{{ k }}</th>
-        <td>—</td>
-        <td>—</td>
-        <td>{{ "%+.2f" | format(v) if v is number else v }}</td>
-      </tr>
-      {% endfor %}
-      {% if c.delta.get("top_value_jaccard") is not none %}
-      <tr>
-        <th scope="row">top-value jaccard</th>
-        <td colspan="2">—</td>
-        <td>{{ "%.2f" | format(c.delta["top_value_jaccard"]) }}</td>
-      </tr>
-      {% endif %}
-      {% if c.delta.get("language_jaccard") is not none %}
-      <tr>
-        <th scope="row">language jaccard</th>
-        <td colspan="2">—</td>
-        <td>{{ "%.2f" | format(c.delta["language_jaccard"]) }}</td>
-      </tr>
-      {% endif %}
-    </tbody>
-  </table>
-  {% if c.notes %}
-  <p class="muted">{{ c.notes | join("; ") }}</p>
-  {% endif %}
-</section>
+  <section id="col-{{ c.column }}" class="column-detail" aria-labelledby="col-{{ c.column }}-heading">
+    <div class="detail-head">
+      <h3 id="col-{{ c.column }}-heading">{{ c.column }}</h3>
+      <span class="chip">{{ c.kind }}</span>
+    </div>
+    {% set ci = (insight_items | selectattr('target', 'equalto', c.column) | first) %}
+    {% if ci %}
+      <blockquote class="per-col-summary">
+        {{ ci.narrative }}
+        <span class="author">{{ ci.confidence }} · {{ ci.model }}</span>
+      </blockquote>
+    {% endif %}
+    <table class="schema-table" style="margin-top: calc(var(--step) * 2);">
+      <caption class="visually-hidden">Side-by-side stats for {{ c.column }}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Stat</th>
+          <th scope="col" class="num">{{ doc.a_label }}</th>
+          <th scope="col" class="num">{{ doc.b_label }}</th>
+          <th scope="col" class="num">Δ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">n</th>
+          <td class="num">{{ "{:,}".format(c.a.n) if c.a else "—" }}</td>
+          <td class="num">{{ "{:,}".format(c.b.n) if c.b else "—" }}</td>
+          <td class="num">—</td>
+        </tr>
+        <tr>
+          <th scope="row">null rate</th>
+          <td class="num">{{ "%.1f%%" | format((c.a.null_rate or 0) * 100) if c.a else "—" }}</td>
+          <td class="num">{{ "%.1f%%" | format((c.b.null_rate or 0) * 100) if c.b else "—" }}</td>
+          <td class="num">{% if 'null_rate_delta' in c.delta %}{{ "%+.1f%%" | format(c.delta['null_rate_delta'] * 100) }}{% else %}—{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row">unique</th>
+          <td class="num">{{ "{:,}".format(c.a.n_unique) if c.a and c.a.n_unique is not none else "—" }}</td>
+          <td class="num">{{ "{:,}".format(c.b.n_unique) if c.b and c.b.n_unique is not none else "—" }}</td>
+          <td class="num">—</td>
+        </tr>
+        {% for k, v in c.delta.items() if k.endswith('_delta') and k != 'null_rate_delta' %}
+          <tr>
+            <th scope="row">{{ k }}</th>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">{% if v is number %}{{ "%+.3g" | format(v) }}{% else %}{{ v }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+        {% if c.delta.get('top_value_jaccard') is not none %}
+          <tr>
+            <th scope="row">top-value jaccard</th>
+            <td class="num" colspan="2">—</td>
+            <td class="num">{{ "%.2f" | format(c.delta['top_value_jaccard']) }}</td>
+          </tr>
+        {% endif %}
+        {% if c.delta.get('language_jaccard') is not none %}
+          <tr>
+            <th scope="row">language jaccard</th>
+            <td class="num" colspan="2">—</td>
+            <td class="num">{{ "%.2f" | format(c.delta['language_jaccard']) }}</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </section>
 {% endfor %}
+
 {% endblock %}

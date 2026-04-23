@@ -4,38 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}saturn{% endblock %}</title>
-  <style>
-    :root { color-scheme: light dark; --ink: #111; --bg: #fff; --line: #ccc; --muted: #666; --accent: #06c; }
-    @media (prefers-color-scheme: dark) { :root { --ink: #eee; --bg: #111; --line: #333; --muted: #999; } }
-    *, *::before, *::after { box-sizing: border-box; }
-    body { font: 16px/1.5 system-ui, sans-serif; margin: 0; color: var(--ink); background: var(--bg); }
-    a { color: var(--accent); }
-    .skip-link { position: absolute; top: -40px; left: 0; background: var(--ink); color: var(--bg); padding: 8px; z-index: 10; }
-    .skip-link:focus { top: 0; }
-    main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
-    header.site { border-bottom: 1px solid var(--line); padding: 0.75rem 1.5rem; }
-    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-    table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
-    th, td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-    th button { background: transparent; border: 0; color: inherit; font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
-    th button:hover { text-decoration: underline; }
-    .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.85em; background: var(--line); }
-    .badge.alert-info { background: #e7f1ff; color: #003d99; }
-    .badge.alert-warn { background: #fff3cd; color: #664d03; }
-    .badge.alert-error { background: #f8d7da; color: #721c24; }
-    .muted { color: var(--muted); }
-    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
-    dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; }
-    dt { font-weight: 600; color: var(--muted); }
-    details > summary { cursor: pointer; margin: 0.5rem 0; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='saturn.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site"><strong>saturn</strong> <span class="muted">— live viewer</span></header>
-  <main id="main" tabindex="-1">
-    {% block main %}{% endblock %}
+  <header class="sitehead">
+    <div class="page">
+      <a class="wordmark" href="{{ url_for('index') }}" aria-label="Saturn home">
+        saturn<em>·</em>
+      </a>
+      <div class="meta" aria-hidden="true">dataset readings</div>
+    </div>
+  </header>
+  <main id="main" tabindex="-1" class="page">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash flash-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    <div class="grid">
+      {% block main %}{% endblock %}
+    </div>
   </main>
+  <footer class="sitefoot">
+    <div class="page">
+      <span>Saturn &middot; dataset dissector</span>
+      <span>v0.2.0 · <a href="https://github.com/lukeslp/saturn">source</a></span>
+    </div>
+  </footer>
+  {% block foot_extra %}{% endblock %}
 </body>
 </html>
