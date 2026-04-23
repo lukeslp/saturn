@@ -43,7 +43,17 @@ saturn analyze big-dataset.parquet --sample 5000
 
 1. **Terminal** — row count, per-column type, null %, unique count, alerts (`duplicates`, `high_skew`, `outliers`, `multilingual`, `near_unique`, `boilerplate`, `allcaps`, `one_word`, `url_heavy` …)
 2. **HTML report** — one self-contained file, TOC + per-column charts + stats tables + (in compare mode) a "most divergent columns" summary driven by a composite score
-3. **JSON findings** — every number and string in the HTML, ready to feed a notebook generator or a later web UI
+3. **JSON findings** — every number and string in the HTML, ready to feed a notebook generator or the live viewer
+
+## Viewer
+
+```bash
+pip install -e '.[web]'
+saturn serve --dir path/to/findings/ --port 5043
+open http://127.0.0.1:5043
+```
+
+A WCAG 2.2 AA-compliant live alternative to the static HTML report. Drops findings JSON files into a directory; refreshing the index picks up new runs without restarting. `/api/findings/<id>` returns the raw JSON for scripting.
 
 ## Design
 
@@ -70,7 +80,7 @@ The **+79 chars** on firehose vs curated was the non-obvious finding — the cur
 
 ## Status
 
-Phase 1 (stats + HTML + JSON) and Phase 4 (compare mode, curated-vs-firehose diff) shipping. Phase 2 (`--llm` insight pass with catfish critic), Phase 3 (BERTopic clustering), Phase 5 (Flask viewer on port 5043) on the roadmap.
+Phase 1 (stats + HTML + JSON), Phase 4 (compare mode, curated-vs-firehose diff), and Phase 5 (Flask viewer on port 5043) shipping. Phase 2 (`--llm` insight pass with catfish critic) and Phase 3 (BERTopic clustering) on the roadmap.
 
 ## License
 
