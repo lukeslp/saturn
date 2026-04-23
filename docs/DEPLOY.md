@@ -67,13 +67,17 @@ Then refresh the viewer in the browser. No restart needed. The index sorts newes
 
 ### 4. Caddy route (needs `@geepers_caddy`)
 
-Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Use the path-stripped pattern (same as other React/Vite-style mounts like `/io/chat`):
+Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Use the path-stripped pattern (same as other React/Vite-style mounts like `/io/chat`), and send `X-Forwarded-Prefix` upstream so Flask's `url_for` can prepend it:
 
 ```caddyfile
 handle_path /saturn/* {
-    reverse_proxy localhost:5043
+    reverse_proxy localhost:5043 {
+        header_up X-Forwarded-Prefix /saturn
+    }
 }
 ```
+
+The `header_up` is load-bearing. Without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (scripts/start.sh sets it on the sm-managed deployment), so a direct-to-gunicorn caller cannot spoof a prefix.
 
 Apply via `@geepers_caddy` (sole authority — do not hand-edit). Then:
 

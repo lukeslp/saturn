@@ -16,6 +16,8 @@ THREADS="${SATURN_THREADS:-4}"
 cd "$APP_DIR"
 source venv/bin/activate
 export PYTHONPATH="/home/coolhand/shared:${PYTHONPATH:-}"
+# Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
+export SATURN_TRUST_FORWARDED_PREFIX=1
 
 mkdir -p "$FINDINGS_DIR"
 

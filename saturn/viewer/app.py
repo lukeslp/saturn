@@ -7,6 +7,7 @@ in prod) configure different findings directories without module-level state.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from flask import Flask, abort, render_template
@@ -14,6 +15,33 @@ from flask import Flask, abort, render_template
 from .loader import FindingsKind, list_findings, load_findings
 
 DEFAULT_PORT = 5043
+
+
+class PrefixMiddleware:
+    """Honor `X-Forwarded-Prefix` from a reverse proxy so `url_for` prepends it.
+
+    Caddy's `handle_path /saturn/*` strips the prefix before the request reaches
+    Flask, so Flask sees `/view/foo` and generates `/view/foo` links. In the
+    browser that resolves to `https://host/view/foo`, missing the `/saturn/`
+    prefix entirely. Path-stripping proxies solve this by also sending
+    `X-Forwarded-Prefix: /saturn`; we read that into `SCRIPT_NAME`, which Flask
+    honours when building URLs.
+
+    Only trusted when `SATURN_TRUST_FORWARDED_PREFIX=1` is set in the
+    environment (sm's start.sh sets it on the VPS deployment). A client calling
+    gunicorn directly cannot inject a fake prefix.
+    """
+
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+        self._trust = os.environ.get("SATURN_TRUST_FORWARDED_PREFIX") == "1"
+
+    def __call__(self, environ, start_response):
+        if self._trust:
+            prefix = environ.get("HTTP_X_FORWARDED_PREFIX", "").rstrip("/")
+            if prefix:
+                environ["SCRIPT_NAME"] = prefix
+        return self.wsgi_app(environ, start_response)
 
 
 def _safe_findings_path(findings_dir: Path, id_: str) -> Path | None:
@@ -41,6 +69,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
     )
     app.config["SATURN_FINDINGS_DIR"] = Path(findings_dir)
     app.config["TESTING"] = testing
+    app.wsgi_app = PrefixMiddleware(app.wsgi_app)
 
     @app.get("/")
     def index():
