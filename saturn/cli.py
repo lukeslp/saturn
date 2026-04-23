@@ -21,6 +21,13 @@ from .report import (
     write_findings,
 )
 
+try:
+    from .viewer.app import DEFAULT_PORT as VIEWER_DEFAULT_PORT
+    from .viewer.app import create_app
+except ImportError:  # [web] extra not installed
+    create_app = None
+    VIEWER_DEFAULT_PORT = 5043
+
 app = typer.Typer(
     name="saturn",
     help="Dataset dissector. Stats pass is free and deterministic; language-model insight is opt-in.",
@@ -360,6 +367,32 @@ def _print_compare_summary(report) -> None:
             notable.append(f"top-val-jaccard {c.delta['top_value_jaccard']:.2f}")
         table.add_row(c.column, c.kind, a_label, b_label, ", ".join(notable) or "[dim]—[/]")
     console.print(table)
+
+
+@app.command(
+    name="serve",
+    help="Start the live viewer (requires pip install 'saturn-dissect[web]').",
+)
+def serve(
+    directory: Path = typer.Option(
+        Path.cwd(), "--dir", help="directory containing findings JSON files"
+    ),
+    port: int = typer.Option(VIEWER_DEFAULT_PORT, "--port"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    debug: bool = typer.Option(False, "--debug"),
+) -> None:
+    if create_app is None:
+        console.print("[red]viewer not installed. run: pip install 'saturn-dissect[web]'[/]")
+        raise typer.Exit(code=1)
+    if not directory.is_dir():
+        console.print(f"[red]not a directory:[/] {directory}")
+        raise typer.Exit(code=2)
+    flask_app = create_app(findings_dir=directory)
+    console.print(
+        f"[green]saturn viewer[/] on [bold]http://{host}:{port}[/] "
+        f"serving [dim]{directory}[/]"
+    )
+    flask_app.run(host=host, port=port, debug=debug)
 
 
 @app.command(name="version")

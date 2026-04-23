@@ -1,0 +1,66 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ doc.id }} — saturn{% endblock %}
+{% block main %}
+<nav aria-label="Breadcrumb"><a href="{{ url_for('index') }}">← all findings</a></nav>
+<h1>{{ doc.meta.source }}</h1>
+<p class="muted">
+  <strong>{{ "{:,}".format(doc.meta.row_count or 0) }}</strong> rows &middot;
+  <strong>{{ doc.columns | length }}</strong> columns &middot;
+  generated {{ doc.meta.generated_at }} &middot;
+  <a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a>
+</p>
+
+<section aria-labelledby="schema-heading">
+  <h2 id="schema-heading">Schema</h2>
+  <table>
+    <caption class="visually-hidden">Per-column summary</caption>
+    <thead>
+      <tr>
+        <th scope="col"><button type="button" data-sort="column">Column</button></th>
+        <th scope="col"><button type="button" data-sort="kind">Kind</button></th>
+        <th scope="col"><button type="button" data-sort="null_rate">Null %</button></th>
+        <th scope="col"><button type="button" data-sort="n_unique">Unique</button></th>
+        <th scope="col">Alerts</th>
+      </tr>
+    </thead>
+    <tbody id="columns-tbody">
+    {% for c in doc.columns %}
+      <tr data-column="{{ c.column }}">
+        <th scope="row"><a href="#col-{{ c.column }}">{{ c.column }}</a></th>
+        <td>{{ c.kind }}</td>
+        <td data-value="{{ (c.null_rate or 0) * 100 }}">{{ "%.1f%%" | format((c.null_rate or 0) * 100) }}</td>
+        <td data-value="{{ c.n_unique if c.n_unique is not none else -1 }}">{{ c.n_unique if c.n_unique is not none else "—" }}</td>
+        <td>
+          {% for a in c.alerts %}
+            <span class="badge alert-{{ a.level }}" title="{{ a.message }}">{{ a.code }}</span>
+          {% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% for c in doc.columns %}
+<section id="col-{{ c.column }}" aria-labelledby="col-{{ c.column }}-heading">
+  <h3 id="col-{{ c.column }}-heading">{{ c.column }} <small class="muted">({{ c.kind }})</small></h3>
+  <dl>
+    <dt>n</dt><dd>{{ c.n }}</dd>
+    <dt>nulls</dt><dd>{{ c.n_null }} ({{ "%.1f%%" | format((c.null_rate or 0) * 100) }})</dd>
+    <dt>unique</dt><dd>{{ c.n_unique if c.n_unique is not none else "—" }}</dd>
+    {% for k, v in c.stats.items() %}
+      <dt>{{ k }}</dt><dd>{{ v }}</dd>
+    {% endfor %}
+  </dl>
+  {% if c.alerts %}
+  <p>
+    {% for a in c.alerts %}
+      <span class="badge alert-{{ a.level }}">{{ a.code }}</span> <span class="muted">{{ a.message }}</span>{% if not loop.last %}<br>{% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+</section>
+{% endfor %}
+
+<script src="{{ url_for('static', filename='sort.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html.j2" %}
+{% block title %}saturn — findings index{% endblock %}
+{% block main %}
+<h1>Findings</h1>
+{% if docs %}
+<table>
+  <caption class="visually-hidden">All saturn findings on disk</caption>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Kind</th>
+      <th scope="col">Source / Labels</th>
+      <th scope="col"><span class="visually-hidden">Action</span></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in docs %}
+    <tr>
+      <th scope="row">{{ d.id }}</th>
+      <td><span class="badge">{{ d.kind.value }}</span></td>
+      <td>
+        {% if d.kind.value == "profile" %}{{ d.meta.source }}
+        {% else %}<strong>{{ d.a_label }}</strong> vs <strong>{{ d.b_label }}</strong>{% endif %}
+      </td>
+      <td><a href="{{ url_for('view', id=d.id) }}">open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No findings files in <code>{{ config.SATURN_FINDINGS_DIR }}</code>.</p>
+<p>Run <code>saturn analyze &lt;source&gt;</code> and drop the resulting JSON in that directory.</p>
+{% endif %}
+{% endblock %}
