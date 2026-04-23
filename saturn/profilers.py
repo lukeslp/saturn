@@ -68,6 +68,50 @@ _CARD_WARN = 0.95
 _NULL_WARN = 0.2
 
 
+def _emit_common_alerts(result: ProfileResult) -> None:
+    """Append alerts common to both profile paths, skipping codes already present.
+
+    Guards: skip-if-present means callers can invoke this alongside existing
+    inline emissions without dup'ing. Stats that the path didn't compute (near-
+    unique columns skip duplicate_counter; JSON-blob columns skip vocab) read
+    as None and fail the predicate silently.
+    """
+    s = result.stats
+    codes = {a.code for a in result.alerts}
+
+    def add(level: str, code: str, condition: bool, message: str) -> None:
+        if code in codes or not condition:
+            return
+        result.alerts.append(Alert(level, code, message))
+        codes.add(code)
+
+    add("warn", "null_rate", result.null_rate > _NULL_WARN,
+        f"{result.null_rate:.1%} null")
+
+    if result.kind == "numeric":
+        skew = s.get("skew")
+        outlier_rate = s.get("outlier_rate")
+        add("info", "high_skew", skew is not None and abs(skew) > 2,
+            f"skew={skew:+.2f}" if skew is not None else "")
+        add("warn", "outliers",
+            outlier_rate is not None and outlier_rate > 0.05,
+            f"{outlier_rate:.1%} rows beyond 1.5 IQR" if outlier_rate is not None else "")
+        add("info", "constant", result.n_unique == 1, "only one distinct value")
+    elif result.kind == "text":
+        len_p95 = s.get("len_p95")
+        dup_rate = s.get("duplicate_rate")
+        add("info", "short_text", len_p95 is not None and len_p95 < 20,
+            "95th-percentile length under 20 chars")
+        add("warn", "duplicates",
+            dup_rate is not None and dup_rate > 0.2,
+            f"{dup_rate:.1%} duplicate strings" if dup_rate is not None else "")
+    elif result.kind == "categorical":
+        top_rate = s.get("top_rate")
+        add("warn", "imbalance",
+            top_rate is not None and top_rate > _CARD_WARN,
+            f"top value is {top_rate:.1%} of rows" if top_rate is not None else "")
+
+
 def profile_dataframe(
     df: "pl.DataFrame", schema: dict[str, str], *, sample_seed: int = 42
 ) -> list[ProfileResult]:
@@ -189,16 +233,7 @@ def _profile_numeric_series(column: str, s: "pl.Series") -> ProfileResult:
         "sample": chart_sample,
     }
 
-    if abs(skew) > 2:
-        result.alerts.append(Alert("info", "high_skew", f"skew={skew:+.2f}"))
-    if result.stats["outlier_rate"] > 0.05:
-        result.alerts.append(
-            Alert("warn", "outliers", f"{result.stats['outlier_rate']:.1%} rows beyond 1.5 IQR")
-        )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
-    if n_unique == 1:
-        result.alerts.append(Alert("info", "constant", "only one distinct value"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -370,14 +405,6 @@ def _profile_text_series(
         result.alerts.append(
             Alert("info", "near_unique", f"{(n_unique / clean.len()):.1%} of rows are unique strings")
         )
-    if result.stats["duplicate_rate"] > 0.2:
-        result.alerts.append(
-            Alert("warn", "duplicates", f"{result.stats['duplicate_rate']:.1%} duplicate strings")
-        )
-    if result.stats["len_p95"] < 20:
-        result.alerts.append(Alert("info", "short_text", "95th-percentile length under 20 chars"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
     if lang_counts and len(lang_counts) > 3:
         result.alerts.append(
             Alert("info", "multilingual", f"{len(lang_counts)} languages detected in sample")
@@ -405,6 +432,7 @@ def _profile_text_series(
                 f"{quality['boilerplate_rate']:.1%} rows start with boilerplate ('image of', …)",
             )
         )
+    _emit_common_alerts(result)
     return result
 
 
@@ -444,12 +472,9 @@ def _profile_categorical_series(column: str, s: "pl.Series") -> ProfileResult:
     }
     result.extras = {"top_values": top_values, "singletons": singletons}
 
-    if top_rate > _CARD_WARN:
-        result.alerts.append(Alert("warn", "imbalance", f"top value is {top_rate:.1%} of rows"))
     if cardinality and singletons / cardinality > 0.5:
         result.alerts.append(Alert("info", "long_tail", f"{singletons} singleton categories"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -654,16 +679,7 @@ def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
     sample_idx = np.random.default_rng(42).choice(a.size, size=min(500, a.size), replace=False)
     result.extras["sample"] = a[np.sort(sample_idx)].tolist()
 
-    if abs(skew) > 2:
-        result.alerts.append(Alert("info", "high_skew", f"skew={skew:+.2f}"))
-    if result.stats["outlier_rate"] > 0.05:
-        result.alerts.append(
-            Alert("warn", "outliers", f"{result.stats['outlier_rate']:.1%} rows beyond 1.5 IQR")
-        )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
-    if result.n_unique == 1:
-        result.alerts.append(Alert("info", "constant", "only one distinct value"))
+    _emit_common_alerts(result)
     return result
 
 
@@ -763,18 +779,11 @@ def _dict_text(column: str, values: Iterable[Any]) -> ProfileResult:
         "sample": sample_strings[:50],
     }
 
-    if result.stats["duplicate_rate"] > 0.2:
-        result.alerts.append(
-            Alert("warn", "duplicates", f"{result.stats['duplicate_rate']:.1%} duplicate strings")
-        )
-    if result.stats["len_p95"] < 20:
-        result.alerts.append(Alert("info", "short_text", "95th-percentile length under 20 chars"))
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
     if lang_counter and len(lang_counter) > 3:
         result.alerts.append(
             Alert("info", "multilingual", f"{len(lang_counter)} languages detected in sample")
         )
+    _emit_common_alerts(result)
     return result
 
 
@@ -822,12 +831,9 @@ def _dict_categorical(column: str, values: Iterable[Any]) -> ProfileResult:
         "singletons": sum(1 for c in counts.values() if c == 1),
     }
 
-    if top_rate > _CARD_WARN:
-        result.alerts.append(Alert("warn", "imbalance", f"top value is {top_rate:.1%} of rows"))
     if result.extras["singletons"] / len(counts) > 0.5:
         result.alerts.append(
             Alert("info", "long_tail", f"{result.extras['singletons']} singleton categories")
         )
-    if result.null_rate > _NULL_WARN:
-        result.alerts.append(Alert("warn", "null_rate", f"{result.null_rate:.1%} null"))
+    _emit_common_alerts(result)
     return result
