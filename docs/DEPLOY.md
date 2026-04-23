@@ -63,6 +63,6 @@ curl -s https://dr.eamer.dev/saturn/health
 
 ### Notes
 
-- Do not edit `~/service_manager.py` or `/etc/caddy/Caddyfile` by hand — coordinate via `@geepers_orchestrator_deploy` and `@geepers_caddy`.
+- Do not edit `~/service_manager.py` or `/etc/caddy/Caddyfile` by hand. Coordinate via `@geepers_orchestrator_deploy` and `@geepers_caddy`.
 - The viewer is read-only. It reads JSON findings files; it does not run saturn.
-- To update findings, re-run `saturn analyze …` and drop the new JSON into the findings directory — the index picks it up on the next request (no restart).
+- To update findings, re-run `saturn analyze …` and drop the new JSON into the findings directory. The index picks it up on the next request (no restart).
