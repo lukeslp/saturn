@@ -16,6 +16,8 @@ from .profilers import ProfileResult, profile_dataframe
 if TYPE_CHECKING:
     import polars as pl
 
+    from .insights import InsightBundle
+
 
 @dataclass
 class ColumnComparison:
@@ -55,15 +57,19 @@ class CompareReport:
     b: CompareSide
     columns: list[ColumnComparison]
     generated_at: str = ""
+    insight_bundle: "InsightBundle | None" = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "a": self.a.to_dict(),
             "b": self.b.to_dict(),
             "columns": [c.to_dict() for c in self.columns],
             "divergences": self.divergence_summary(),
             "generated_at": self.generated_at,
         }
+        if self.insight_bundle is not None:
+            out["insights"] = self.insight_bundle.to_dict()
+        return out
 
     def divergence_summary(self, k: int = 6) -> list[dict[str, Any]]:
         """Return the top-K columns ranked by a composite divergence score.

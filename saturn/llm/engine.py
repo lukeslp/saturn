@@ -14,6 +14,7 @@ from typing import Mapping
 
 from ..insights import Critique, Insight, InsightBundle
 from ..report import ReportData
+from .compare_evidence import compare_column_evidence, compare_dataset_evidence
 from .evidence import column_evidence, dataset_evidence
 from .gateway import ProviderSpec, call_provider
 from .parsing import (
@@ -23,6 +24,8 @@ from .parsing import (
 )
 from .prompts import (
     build_column_prompt,
+    build_compare_column_prompt,
+    build_compare_dataset_prompt,
     build_critique_prompt,
     build_dataset_prompt,
 )
@@ -134,6 +137,81 @@ def run_insights(
             user,
             scope="column",
             target=r.column,
+        )
+        if col_insight:
+            bundle.insights.append(col_insight)
+            if critic:
+                crit = _one_critique(
+                    bundle, critic, api_keys[critic.provider], col_insight, col_ev
+                )
+                if crit:
+                    col_insight.critiques.append(crit)
+
+    return bundle
+
+
+def run_compare_insights(
+    report,  # CompareReport
+    *,
+    specs: list[ProviderSpec],
+    api_keys: Mapping[str, str],
+    max_columns: int = 6,
+) -> InsightBundle:
+    """Insight pass for a pairwise comparison.
+
+    Generates one dataset-scope insight plus one per-column insight for the
+    top-K most divergent columns (skipping columns missing on one side and
+    pairs with empty delta). Optional critic follows the same pattern as the
+    single-dataset path.
+    """
+    if not specs:
+        raise ValueError("at least one provider spec required")
+
+    bundle = InsightBundle(providers=[s.label() for s in specs])
+    primary = specs[0]
+    critic = specs[1] if len(specs) >= 2 else None
+
+    # Dataset-scope compare insight
+    ds_ev = compare_dataset_evidence(report)
+    sys, user = build_compare_dataset_prompt(ds_ev)
+    ds_insight = _one_insight(
+        bundle,
+        primary,
+        api_keys[primary.provider],
+        sys,
+        user,
+        scope="compare",
+        target="__global__",
+    )
+    if ds_insight:
+        bundle.insights.append(ds_insight)
+        if critic:
+            crit = _one_critique(
+                bundle, critic, api_keys[critic.provider], ds_insight, ds_ev
+            )
+            if crit:
+                ds_insight.critiques.append(crit)
+
+    # Per-column compare insights for the top-K divergences
+    divergences = report.divergence_summary(k=max_columns)
+    wanted = [d["column"] for d in divergences]
+    by_name = {c.column: c for c in report.columns}
+    for name in wanted:
+        cc = by_name.get(name)
+        if cc is None or cc.a is None or cc.b is None:
+            continue
+        col_ev = compare_column_evidence(
+            cc, a_label=report.a.label, b_label=report.b.label
+        )
+        sys, user = build_compare_column_prompt(col_ev)
+        col_insight = _one_insight(
+            bundle,
+            primary,
+            api_keys[primary.provider],
+            sys,
+            user,
+            scope="compare",
+            target=name,
         )
         if col_insight:
             bundle.insights.append(col_insight)

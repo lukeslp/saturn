@@ -29,12 +29,13 @@ except ImportError:  # [web] extra not installed
     VIEWER_DEFAULT_PORT = 5043
 
 try:
-    from .llm.engine import run_insights
+    from .llm.engine import run_compare_insights, run_insights
     from .llm.gateway import parse_provider_spec
     from .llm.keys import MissingKeyError, load_api_keys
     _LLM_AVAILABLE = True
 except ImportError:  # ~/shared/llm_providers not on PYTHONPATH
     run_insights = None
+    run_compare_insights = None
     parse_provider_spec = None
     load_api_keys = None
 
@@ -44,21 +45,30 @@ except ImportError:  # ~/shared/llm_providers not on PYTHONPATH
     _LLM_AVAILABLE = False
 
 
-def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
-    """Populate `data.insight_bundle` when --llm was passed. Fail-open throughout."""
+def _resolve_llm(llm_spec: list[str] | None):
+    """Return (specs, api_keys) or None if the pass should be skipped (with a message)."""
     if not llm_spec:
-        return
+        return None
     if not _LLM_AVAILABLE:
         console.print(
             "[red]--llm requires ~/shared on PYTHONPATH[/] (see docs/DEPLOY.md)"
         )
-        return
+        return None
     try:
         specs = [parse_provider_spec(s) for s in llm_spec]
         keys = load_api_keys([s.provider for s in specs])
     except (MissingKeyError, ValueError) as e:
         console.print(f"[yellow]insight pass skipped:[/] {e}")
+        return None
+    return specs, keys
+
+
+def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
+    """Populate `data.insight_bundle` when --llm was passed. Fail-open throughout."""
+    resolved = _resolve_llm(llm_spec)
+    if resolved is None:
         return
+    specs, keys = resolved
 
     label = ", ".join(s.label() for s in specs)
     with console.status(f"insight pass ({label})", spinner="dots"):
@@ -70,6 +80,27 @@ def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
             f"[yellow]insight pass completed with {len(bundle.errors)} error(s)[/]"
         )
     console.print(f"[green]✓[/] insight pass: {len(bundle.insights)} insight(s)")
+
+
+def _maybe_run_compare_insights(report, llm_spec: list[str] | None) -> None:
+    """Populate `report.insight_bundle` when --llm was passed on the compare command."""
+    resolved = _resolve_llm(llm_spec)
+    if resolved is None:
+        return
+    specs, keys = resolved
+
+    label = ", ".join(s.label() for s in specs)
+    with console.status(f"compare insight pass ({label})", spinner="dots"):
+        bundle = run_compare_insights(report, specs=specs, api_keys=keys)
+    report.insight_bundle = bundle
+
+    if bundle.errors:
+        console.print(
+            f"[yellow]compare insight pass completed with {len(bundle.errors)} error(s)[/]"
+        )
+    console.print(
+        f"[green]✓[/] compare insight pass: {len(bundle.insights)} insight(s)"
+    )
 
 app = typer.Typer(
     name="saturn",
@@ -333,6 +364,11 @@ def compare(
     split_a: str | None = typer.Option(None, "--split-a", help="HF split for source_a"),
     split_b: str | None = typer.Option(None, "--split-b", help="HF split for source_b"),
     open_browser: bool = typer.Option(False, "--open"),
+    llm_spec: list[str] = typer.Option(
+        None,
+        "--llm",
+        help="provider[:model] to run compare-mode insight pass. Repeat for primary + critic.",
+    ),
 ) -> None:
     console.print(Panel(f"[bold]saturn compare[/bold] v{__version__}", border_style="magenta"))
 
@@ -386,6 +422,8 @@ def compare(
         )
 
     _print_compare_summary(report)
+
+    _maybe_run_compare_insights(report, llm_spec)
 
     out_path = render_compare_html(report, out)
     findings_path = write_compare_findings(report, findings)

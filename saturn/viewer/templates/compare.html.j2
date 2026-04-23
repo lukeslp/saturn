@@ -10,6 +10,31 @@
   <a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a>
 </p>
 
+{% if doc.raw.insights %}
+<section aria-labelledby="insights-heading">
+  <h2 id="insights-heading">Insights <small class="muted">({{ doc.raw.insights.providers | join(", ") }})</small></h2>
+  <p class="muted">Model-generated narrative. Deltas below are what saturn measured.</p>
+  {% for ins in doc.raw.insights.insights %}
+  <article>
+    <header>
+      <strong>{% if ins.target == "__global__" %}Dataset{% else %}<a href="#col-{{ ins.target }}">{{ ins.target }}</a>{% endif %}</strong>
+      <span class="badge">{{ ins.confidence }}</span>
+      <span class="muted">{{ ins.model }}</span>
+    </header>
+    <p>{{ ins.narrative }}</p>
+    {% if ins.critiques %}
+    <details>
+      <summary>Critiques ({{ ins.critiques | length }})</summary>
+      <ul>
+        {% for c in ins.critiques %}<li><strong>{{ c.reviewer_model }}</strong>: <em>{{ c.verdict }}</em>. {{ c.reason }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if doc.raw.divergences %}
 <section aria-labelledby="div-heading">
   <h2 id="div-heading">Most divergent columns</h2>
