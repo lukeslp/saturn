@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "saturn-dissect"
-version = "0.1.0"
-description = "Dataset dissector: multi-provider language-model analysis + Python NLP and statistics, CLI-first"
+version = "0.2.0"
+description = "Dataset dissector: polars-native profiling, HTML + JSON reports, optional multi-provider LLM insight pass, live Flask viewer"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
