@@ -29,7 +29,18 @@ from .runner import analyze_hf, analyze_upload, backfill_insights, get_job, star
 
 DEFAULT_PORT = 5043
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
-_ALLOWED_EXT = {".csv", ".jsonl", ".ndjson", ".parquet", ".json", ".db", ".sqlite", ".sqlite3"}
+_ALLOWED_EXT = {
+    # tabular text
+    ".csv", ".tsv",
+    # JSON variants
+    ".jsonl", ".ndjson", ".json",
+    # columnar
+    ".parquet", ".feather", ".arrow",
+    # spreadsheets
+    ".xlsx", ".xls", ".xlsb", ".ods",
+    # embedded
+    ".db", ".sqlite", ".sqlite3",
+}
 _ID_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 

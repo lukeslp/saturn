@@ -6,8 +6,8 @@
   <p class="eyebrow">dataset dissector · v0.2.0</p>
   <h1>Point saturn at a dataset. Get a plain-language <em>reading</em> and every number behind it.</h1>
   <p class="lede">
-    Drop a CSV, JSONL, Parquet, or SQLite file, or paste a HuggingFace repo id.
-    Saturn profiles the whole corpus, then a language model writes up what changed
+    Drop a spreadsheet, CSV, JSONL, Parquet, SQLite, or Arrow file, or paste a HuggingFace
+    repo id. Saturn profiles the whole corpus, then a language model writes up what changed
     and what's worth a closer look. All statistics are deterministic and machine-readable.
   </p>
 </section>
@@ -18,9 +18,10 @@
     <h2>Local file</h2>
     <label class="dropzone" id="dropzone" tabindex="0">
       <span class="subcallout">drop · or · browse</span>
-      <span class="callout" id="dropzone-callout">CSV · JSONL · Parquet · SQLite</span>
+      <span class="callout" id="dropzone-callout">XLSX · CSV · Parquet · SQLite · &hellip;</span>
       <span class="filename" id="dropzone-filename" aria-live="polite"></span>
-      <input type="file" name="file" id="file-input" accept=".csv,.jsonl,.ndjson,.parquet,.json,.db,.sqlite,.sqlite3">
+      <input type="file" name="file" id="file-input"
+             accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet,.feather,.arrow,.xlsx,.xls,.xlsb,.ods,.db,.sqlite,.sqlite3">
     </label>
     <label class="checkbox">
       <input type="checkbox" name="no_llm" value="1">

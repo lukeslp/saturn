@@ -56,6 +56,9 @@ dev = [
 web = [
     "flask>=3.0",
     "werkzeug>=3.0",
+    # Spreadsheet ingestion for uploaded .xlsx / .xls / .xlsb / .ods
+    "fastexcel>=0.10",
+    "xlsxwriter>=3.0",
 ]
 all = [
     "saturn-dissect[nlp,llm,web,dev]",

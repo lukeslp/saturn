@@ -243,3 +243,32 @@ def test_analyze_hf_runner_rejects_injection_attempt(tmp_path):
 
     with pytest.raises(ValueError, match="unsafe hf repo"):
         analyze_hf("j", tmp_path, "user/repo;rm -rf /", "fid", None)
+
+
+# ---------- new format acceptance --------------------------------------------
+
+
+@pytest.mark.parametrize("filename", [
+    "sheet.xlsx", "legacy.xls", "binary.xlsb", "opendoc.ods",
+    "data.tsv", "columnar.feather", "arrow.arrow",
+])
+def test_analyze_upload_accepts_new_formats(client, monkeypatch, filename):
+    """Whitelist and accept-attr cover every format the ingestion layer handles."""
+    captured = {}
+
+    def fake_start(kind, target, *args, **kwargs):
+        from saturn.viewer.runner import Job, _JOBS
+        captured["args"] = args
+        job = Job(id="fmt", kind=kind)
+        _JOBS[job.id] = job
+        return job
+
+    monkeypatch.setattr("saturn.viewer.app.start_job", fake_start)
+    resp = client.post(
+        "/analyze",
+        data={"file": (io.BytesIO(b"anything"), filename)},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 302, f"{filename} should have been accepted"
+    _dir, upload_path, _fid, _provider = captured["args"]
+    assert upload_path.name == filename

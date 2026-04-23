@@ -368,6 +368,11 @@ class FileAdapter(SourceAdapter):
             self._con = duckdb.connect(":memory:")
         return self._con
 
+    # Extensions polars reads directly (no DuckDB in the loop). These are
+    # loaded eagerly — XLSX/ODS don't stream usefully, so both schema() and
+    # iter_batches() serve from the cached frame.
+    _POLARS_DIRECT = {".xlsx", ".xls", ".xlsb", ".ods", ".tsv", ".feather", ".arrow"}
+
     def _scan_sql(self) -> str:
         ext = self.path.suffix.lower()
         if ext == ".parquet":
@@ -393,8 +398,33 @@ class FileAdapter(SourceAdapter):
             return f"SELECT * FROM s.{table}"
         raise ValueError(f"Unsupported file type: {ext}")
 
+    def _load_with_polars(self) -> "pl.DataFrame":
+        """Load formats DuckDB doesn't handle natively, via polars.
+
+        XLSX/XLS/XLSB/ODS route through `fastexcel` (polars default backend).
+        For multi-sheet workbooks we take the first sheet — users wanting a
+        specific sheet should export it to CSV first.
+        """
+        import polars as pl
+
+        ext = self.path.suffix.lower()
+        if ext in {".xlsx", ".xls", ".xlsb", ".ods"}:
+            frame = pl.read_excel(self.path)
+            if isinstance(frame, dict):  # multi-sheet workbook
+                frame = next(iter(frame.values()))
+            return frame
+        if ext == ".tsv":
+            return pl.read_csv(self.path, separator="\t", infer_schema_length=5_000)
+        if ext in {".feather", ".arrow"}:
+            return pl.read_ipc(self.path)
+        raise ValueError(f"no polars direct loader for {ext}")
+
     def schema(self) -> Schema:
         if self._schema is not None:
+            return self._schema
+        if self.path.suffix.lower() in self._POLARS_DIRECT:
+            # No cheap streaming schema for these — load fully and infer.
+            self.load_dataframe()
             return self._schema
         con = self._conn()
         sample_rows = con.execute(f"{self._scan_sql()} LIMIT 200").fetch_df().to_dict("records")
@@ -409,7 +439,9 @@ class FileAdapter(SourceAdapter):
 
         ext = self.path.suffix.lower()
         try:
-            if ext == ".parquet":
+            if ext in self._POLARS_DIRECT:
+                df = _ensure_frame(self._load_with_polars())
+            elif ext == ".parquet":
                 df = pl.read_parquet(self.path)
             elif ext == ".csv":
                 df = pl.read_csv(self.path, infer_schema_length=5_000)
@@ -422,7 +454,7 @@ class FileAdapter(SourceAdapter):
                 tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
                 df = _ensure_frame(pl.from_arrow(tbl))
         except Exception:
-            # last-ditch: DuckDB can read almost anything
+            # last-ditch: DuckDB can read almost anything we haven't caught
             tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
             df = _ensure_frame(pl.from_arrow(tbl))
 
@@ -432,6 +464,13 @@ class FileAdapter(SourceAdapter):
         return df
 
     def iter_batches(self, batch_size: int = 10_000) -> Iterator[list[dict[str, Any]]]:
+        if self.path.suffix.lower() in self._POLARS_DIRECT:
+            # Eagerly-loaded formats: chunk the cached dict list.
+            records = self.load_dataframe().to_dicts()
+            for i in range(0, len(records), batch_size):
+                yield records[i : i + batch_size]
+            return
+
         import duckdb
 
         con = self._conn()

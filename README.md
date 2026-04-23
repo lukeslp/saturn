@@ -25,7 +25,7 @@ Python 3.10+ required.
 # Full-corpus profile of a HuggingFace dataset
 saturn huggingface lukeslp/bluesky-alt-text
 
-# Local file (CSV, JSONL, Parquet, SQLite)
+# Local file (CSV, TSV, JSONL, JSON, Parquet, Feather/Arrow, XLSX/XLS/XLSB/ODS, SQLite)
 saturn analyze path/to/data.csv
 
 # Compare two slices of one dataset by a column value
