@@ -40,3 +40,4 @@ saturn_findings.json
 # Local sample data
 data/
 !tests/fixtures/
+.claude/
