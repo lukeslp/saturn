@@ -81,3 +81,35 @@ def test_prompts_produce_valid_json_in_user_payload():
     # Strip the leading "Column evidence:\n" prefix and confirm the rest parses
     payload = user.split("\n", 1)[1]
     json.loads(payload)
+
+
+def test_compare_column_prompt_uses_pair_evidence():
+    from saturn.llm.prompts import build_compare_column_prompt, PROMPT_VERSION
+
+    ev = {
+        "column": "alt_text",
+        "kind": "text",
+        "a": {"label": "curated", "n": 1000, "stats": {"len_mean": 200}},
+        "b": {"label": "firehose", "n": 500, "stats": {"len_mean": 281}},
+        "delta": {"len_mean_delta": 81.0},
+    }
+    sys, user = build_compare_column_prompt(ev)
+    assert PROMPT_VERSION in sys
+    assert "curated" in user
+    assert "firehose" in user
+    assert "81" in user
+
+
+def test_compare_dataset_prompt_has_hotspots_contract():
+    from saturn.llm.prompts import build_compare_dataset_prompt, PROMPT_VERSION
+
+    ev = {
+        "a_label": "curated", "b_label": "firehose",
+        "a_row_count": 1000, "b_row_count": 500,
+        "column_count": 5,
+        "divergences": [{"column": "alt_text", "kind": "text", "score": 1.2, "signals": ["len_mean +81"]}],
+    }
+    sys, user = build_compare_dataset_prompt(ev)
+    assert "hotspots" in sys
+    assert PROMPT_VERSION in sys
+    assert "alt_text" in user

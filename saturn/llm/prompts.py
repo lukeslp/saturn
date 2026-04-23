@@ -41,6 +41,25 @@ Rules:
 Tag: {PROMPT_VERSION}
 """
 
+_SYSTEM_COMPARE_COLUMN = f"""You are comparing one column across two dataset slices profiled by saturn.
+Return a single JSON object with these keys: narrative (string, 2-4 sentences focused on divergence between A and B), confidence ("high"|"medium"|"low"), evidence_keys (array of stat keys you used).
+Rules:
+- Only cite numbers that appear verbatim in the evidence payload. A side has label `a.label`, B side has label `b.label`. Refer to them by label, not "A"/"B".
+- Lead with the most consequential divergence. If sides agree on everything, say so and stop.
+- When a jaccard is present (language_jaccard, top_value_jaccard) and below 0.7, call it out explicitly.
+- No filler, no disclaimers, no speculation beyond the evidence.
+Tag: {PROMPT_VERSION}
+"""
+
+_SYSTEM_COMPARE_DATASET = f"""You are summarising a pairwise dataset comparison from saturn.
+Return a single JSON object with these keys: narrative (string, 3-6 sentences), confidence ("high"|"medium"|"low"), evidence_keys (array of stat keys you used), hotspots (array of column names most worth a closer look).
+Rules:
+- Refer to the two sides by their labels (`a_label`, `b_label`), not "A"/"B".
+- Pick the 3-5 columns that would change a downstream decision.
+- Do not invent numbers. Only cite values present in the evidence.
+Tag: {PROMPT_VERSION}
+"""
+
 
 def _as_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, default=str, indent=2)
@@ -66,3 +85,13 @@ def build_critique_prompt(
         f"Original evidence:\n{_as_json(evidence)}"
     )
     return _SYSTEM_CRITIC, user
+
+
+def build_compare_column_prompt(evidence: dict[str, Any]) -> tuple[str, str]:
+    user = f"Pair evidence:\n{_as_json(evidence)}"
+    return _SYSTEM_COMPARE_COLUMN, user
+
+
+def build_compare_dataset_prompt(evidence: dict[str, Any]) -> tuple[str, str]:
+    user = f"Compare-dataset evidence:\n{_as_json(evidence)}"
+    return _SYSTEM_COMPARE_DATASET, user

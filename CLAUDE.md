@@ -134,9 +134,9 @@ Reads JSON findings off disk and serves them via Flask on port 5043. Routes: `/`
 
 - **Phase 1** (shipped): stats pass, HTML, JSON
 - **Phase 2** (shipped): `--llm provider[:model]` insight pass with catfish critic, analyze and huggingface commands
+- **Phase 2.5** (shipped): compare-mode insight pass with pair evidence and delta-aware prompts
 - **Phase 4** (shipped): compare mode, divergence summary, streaming fallback
 - **Phase 5** (shipped): Flask viewer on port 5043 (`saturn serve`), read-only, WCAG 2.2 AA
-- **Phase 2.5** (planned): compare-mode insight pass with pair evidence and delta-aware prompts
 - **Phase 3** (planned): BERTopic clustering via the `[nlp]` extra
 
 The `ReportData.to_findings()` contract is the interchange format everything downstream keys off. The viewer serves it verbatim via `/api/findings/<id>`, so Phase 2 insights appear in the viewer automatically once the key is populated.
