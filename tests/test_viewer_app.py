@@ -195,3 +195,32 @@ def test_compare_view_has_caption_and_divergence_summary(client, findings_dir):
     body = resp.get_data(as_text=True)
     assert "Most divergent" in body
     assert "<caption" in body
+
+
+def test_view_rejects_path_traversal_in_id(tmp_path):
+    """Even if Flask's converter changes, _safe_findings_path must block escapes."""
+    secret = tmp_path.parent / "secret.json"
+    secret.write_text('{"meta": {}, "columns": []}')
+    try:
+        app = create_app(findings_dir=tmp_path, testing=True)
+        client = app.test_client()
+
+        # Directly exercise the helper: a concocted id that would escape if unchecked
+        from saturn.viewer.app import _safe_findings_path
+
+        escaped = _safe_findings_path(tmp_path, "../secret")
+        assert escaped is None, "traversal not blocked"
+
+        # The live routes still return 404 for missing files (no traversal reachable
+        # via Flask's default string converter, so the status is the same either way)
+        resp = client.get("/view/..")
+        assert resp.status_code == 404
+    finally:
+        secret.unlink(missing_ok=True)
+
+
+def test_api_findings_rejects_path_traversal_in_id(tmp_path):
+    from saturn.viewer.app import _safe_findings_path
+
+    outside = _safe_findings_path(tmp_path, "../../../etc/passwd")
+    assert outside is None
