@@ -224,3 +224,55 @@ def test_api_findings_rejects_path_traversal_in_id(tmp_path):
 
     outside = _safe_findings_path(tmp_path, "../../../etc/passwd")
     assert outside is None
+
+
+def test_prefix_middleware_honors_x_forwarded_prefix_when_trusted(tmp_path, monkeypatch):
+    """When SATURN_TRUST_FORWARDED_PREFIX=1, url_for must prepend the forwarded prefix."""
+    import json
+
+    (tmp_path / "demo.json").write_text(
+        json.dumps(
+            {
+                "saturn_version": "0.1.0",
+                "meta": {"source": "s", "row_count": 1, "sampled_rows": 1, "seed": 0,
+                         "mode": "full", "generated_at": "2026-04-23T00:00:00+00:00"},
+                "schema": {"a": "numeric"}, "language_counts": {}, "notes": [],
+                "columns": [{"column": "a", "kind": "numeric", "n": 1, "n_null": 0,
+                             "n_unique": 1, "stats": {}, "extras": {}, "alerts": [],
+                             "null_rate": 0.0}],
+            }
+        )
+    )
+    monkeypatch.setenv("SATURN_TRUST_FORWARDED_PREFIX", "1")
+    app = create_app(findings_dir=tmp_path, testing=True)
+    client = app.test_client()
+    resp = client.get("/", headers={"X-Forwarded-Prefix": "/saturn"})
+    body = resp.get_data(as_text=True)
+    # The url_for('view', id='demo') call must prefix with /saturn
+    assert 'href="/saturn/view/demo"' in body, body[:500]
+
+
+def test_prefix_middleware_ignores_header_when_not_trusted(tmp_path, monkeypatch):
+    """Without the trust flag, a spoofed X-Forwarded-Prefix must be ignored."""
+    import json
+
+    (tmp_path / "demo.json").write_text(
+        json.dumps(
+            {
+                "saturn_version": "0.1.0",
+                "meta": {"source": "s", "row_count": 1, "sampled_rows": 1, "seed": 0,
+                         "mode": "full", "generated_at": "2026-04-23T00:00:00+00:00"},
+                "schema": {"a": "numeric"}, "language_counts": {}, "notes": [],
+                "columns": [{"column": "a", "kind": "numeric", "n": 1, "n_null": 0,
+                             "n_unique": 1, "stats": {}, "extras": {}, "alerts": [],
+                             "null_rate": 0.0}],
+            }
+        )
+    )
+    monkeypatch.delenv("SATURN_TRUST_FORWARDED_PREFIX", raising=False)
+    app = create_app(findings_dir=tmp_path, testing=True)
+    client = app.test_client()
+    resp = client.get("/", headers={"X-Forwarded-Prefix": "/hacker"})
+    body = resp.get_data(as_text=True)
+    assert 'href="/hacker/' not in body
+    assert 'href="/view/demo"' in body  # plain root, no prefix
