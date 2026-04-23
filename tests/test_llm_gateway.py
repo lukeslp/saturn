@@ -77,3 +77,58 @@ def test_call_provider_handles_missing_usage_gracefully():
             api_key="sk",
         )
     assert usage == {}
+
+
+def test_call_provider_retries_on_rate_limit():
+    """429-like errors should trigger exponential backoff + retry."""
+    from unittest.mock import MagicMock, patch
+
+    fake_response = MagicMock()
+    fake_response.content = "{}"
+    fake_response.usage = {"input_tokens": 1}
+
+    class FakeRateLimitError(Exception):
+        pass
+
+    calls = {"n": 0}
+
+    def _complete(messages, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise FakeRateLimitError("429 rate_limit_error: concurrent limit")
+        return fake_response
+
+    fake_provider = MagicMock()
+    fake_provider.complete.side_effect = _complete
+
+    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory, \
+         patch("saturn.llm.gateway.time.sleep"):  # skip backoff waits
+        mock_factory.create_provider.return_value = fake_provider
+        content, _ = call_provider(
+            ProviderSpec("anthropic", None),
+            system="s", user="u", api_key="sk",
+        )
+    assert calls["n"] == 3
+    assert content == "{}"
+
+
+def test_call_provider_does_not_retry_non_rate_limit_errors():
+    """Non-429 errors should fail fast, not burn retries."""
+    from unittest.mock import MagicMock, patch
+
+    fake_provider = MagicMock()
+    fake_provider.complete.side_effect = ValueError("bad request")
+
+    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory, \
+         patch("saturn.llm.gateway.time.sleep") as mock_sleep:
+        mock_factory.create_provider.return_value = fake_provider
+        try:
+            call_provider(
+                ProviderSpec("anthropic", None),
+                system="s", user="u", api_key="sk",
+            )
+            assert False, "should have raised"
+        except ValueError:
+            pass
+    assert fake_provider.complete.call_count == 1
+    mock_sleep.assert_not_called()

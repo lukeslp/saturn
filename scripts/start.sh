@@ -10,8 +10,11 @@ APP_DIR="/home/coolhand/projects/saturn/saturn"
 FINDINGS_DIR="${SATURN_FINDINGS_DIR:-/home/coolhand/saturn-findings}"
 PORT="${SATURN_PORT:-5043}"
 HOST="${SATURN_HOST:-127.0.0.1}"
-WORKERS="${SATURN_WORKERS:-2}"
-THREADS="${SATURN_THREADS:-4}"
+# Single worker so background job state (runner._JOBS) is shared across
+# all request handlers. Threads give us concurrent reads. If this ever
+# becomes a bottleneck, move _JOBS to SQLite or a shared memory store.
+WORKERS="${SATURN_WORKERS:-1}"
+THREADS="${SATURN_THREADS:-8}"
 
 cd "$APP_DIR"
 source venv/bin/activate
