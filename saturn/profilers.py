@@ -68,6 +68,59 @@ _CARD_WARN = 0.95
 _NULL_WARN = 0.2
 
 
+def _numeric_stats(a) -> tuple[dict, dict]:
+    """Given a numpy array of clean floats, return (stats, extras).
+
+    Shared core for both `_profile_numeric_series` (polars) and `_dict_numeric`.
+    Guards borrowed from the polars path:
+    - scipy precision-loss RuntimeWarning is silenced on near-constant arrays
+    - skew/kurtosis are 0.0 when std is near-zero (would otherwise be 0/0)
+    """
+    import warnings
+
+    import numpy as np
+    from scipy import stats as scs
+
+    q1, q3 = np.quantile(a, [0.25, 0.75])
+    iqr = q3 - q1
+    outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
+
+    if a.size > 2 and float(a.std(ddof=0)) > 1e-12:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            skew = float(scs.skew(a))
+            kurt = float(scs.kurtosis(a)) if a.size > 3 else 0.0
+    else:
+        skew = 0.0
+        kurt = 0.0
+
+    stats = {
+        "min": float(a.min()),
+        "max": float(a.max()),
+        "mean": float(a.mean()),
+        "median": float(np.median(a)),
+        "std": float(a.std(ddof=1)) if a.size > 1 else 0.0,
+        "q1": float(q1),
+        "q3": float(q3),
+        "iqr": float(iqr),
+        "skew": skew,
+        "kurtosis": kurt,
+        "n_outliers": int(outlier_mask.sum()),
+        "outlier_rate": float(outlier_mask.mean()),
+        "zero_rate": float((a == 0).mean()),
+    }
+    bins = min(40, max(5, int(math.sqrt(a.size))))
+    hist_counts, hist_edges = np.histogram(a, bins=bins)
+    sample_idx = np.random.default_rng(42).choice(
+        a.size, size=min(500, a.size), replace=False
+    )
+    extras = {
+        "histogram": {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()},
+        "sample": a[np.sort(sample_idx)].tolist(),
+    }
+    return stats, extras
+
+
 def _emit_common_alerts(result: ProfileResult) -> None:
     """Append alerts common to both profile paths, skipping codes already present.
 
@@ -171,67 +224,8 @@ def _profile_numeric_series(column: str, s: "pl.Series") -> ProfileResult:
         result.alerts.append(Alert("warn", "all_null", "column is entirely null or non-numeric"))
         return result
 
-    # vectorised stats
-    minimum = float(clean.min())  # type: ignore[arg-type]
-    maximum = float(clean.max())  # type: ignore[arg-type]
-    mean = float(clean.mean())  # type: ignore[arg-type]
-    std = float(clean.std(ddof=1)) if clean.len() > 1 else 0.0
-    median = float(clean.median())  # type: ignore[arg-type]
-    q1 = float(clean.quantile(0.25))  # type: ignore[arg-type]
-    q3 = float(clean.quantile(0.75))  # type: ignore[arg-type]
-    iqr = q3 - q1
-    n_unique = clean.n_unique()
-    zero_rate = float((clean == 0).sum() / clean.len())
-
-    outlier_mask = (clean < q1 - 1.5 * iqr) | (clean > q3 + 1.5 * iqr)
-    n_outliers = int(outlier_mask.sum())
-
-    # skew + kurtosis via numpy; guard against near-constant arrays where
-    # scipy raises a precision-loss warning (kurtosis / std^3 → 0/0)
-    import numpy as np
-    import warnings
-
-    from scipy import stats as scs
-
-    arr = clean.to_numpy()
-    if arr.size > 2 and float(arr.std(ddof=0)) > 1e-12:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            skew = float(scs.skew(arr))
-            kurt = float(scs.kurtosis(arr)) if arr.size > 3 else 0.0
-    else:
-        skew = 0.0
-        kurt = 0.0
-
-    hist_bins = min(40, max(5, int(math.sqrt(arr.size))))
-    hist_counts, hist_edges = np.histogram(arr, bins=hist_bins)
-
-    # sample for correlation heatmap downstream (bounded)
-    sample_size = min(500, arr.size)
-    rng = np.random.default_rng(42)
-    sample_idx = rng.choice(arr.size, size=sample_size, replace=False)
-    chart_sample = arr[np.sort(sample_idx)].tolist()
-
-    result.n_unique = n_unique
-    result.stats = {
-        "min": minimum,
-        "max": maximum,
-        "mean": mean,
-        "median": median,
-        "std": std,
-        "q1": q1,
-        "q3": q3,
-        "iqr": iqr,
-        "skew": skew,
-        "kurtosis": kurt,
-        "n_outliers": n_outliers,
-        "outlier_rate": float(n_outliers / clean.len()),
-        "zero_rate": zero_rate,
-    }
-    result.extras = {
-        "histogram": {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()},
-        "sample": chart_sample,
-    }
+    result.n_unique = clean.n_unique()
+    result.stats, result.extras = _numeric_stats(clean.to_numpy())
 
     _emit_common_alerts(result)
     return result
@@ -631,7 +625,6 @@ def profile_columns(
 
 def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
     import numpy as np
-    from scipy import stats as scs
 
     arr_all: list[float] = []
     n = 0
@@ -653,31 +646,7 @@ def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
 
     a = np.asarray(arr_all, dtype=float)
     result.n_unique = int(np.unique(a).size)
-    q1, q3 = np.quantile(a, [0.25, 0.75])
-    iqr = q3 - q1
-    outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
-    skew = float(scs.skew(a)) if a.size > 2 else 0.0
-    kurt = float(scs.kurtosis(a)) if a.size > 3 else 0.0
-
-    result.stats = {
-        "min": float(a.min()),
-        "max": float(a.max()),
-        "mean": float(a.mean()),
-        "median": float(np.median(a)),
-        "std": float(a.std(ddof=1)) if a.size > 1 else 0.0,
-        "q1": float(q1),
-        "q3": float(q3),
-        "iqr": float(iqr),
-        "skew": skew,
-        "kurtosis": kurt,
-        "n_outliers": int(outlier_mask.sum()),
-        "outlier_rate": float(outlier_mask.mean()),
-        "zero_rate": float((a == 0).mean()),
-    }
-    hist_counts, hist_edges = np.histogram(a, bins=min(40, max(5, int(math.sqrt(a.size)))))
-    result.extras["histogram"] = {"counts": hist_counts.tolist(), "edges": hist_edges.tolist()}
-    sample_idx = np.random.default_rng(42).choice(a.size, size=min(500, a.size), replace=False)
-    result.extras["sample"] = a[np.sort(sample_idx)].tolist()
+    result.stats, result.extras = _numeric_stats(a)
 
     _emit_common_alerts(result)
     return result
