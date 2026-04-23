@@ -67,9 +67,11 @@ Then refresh the viewer in the browser. No restart needed. The index sorts newes
 
 ### 4. Caddy route (needs `@geepers_caddy`)
 
-Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Use the path-stripped pattern (same as other React/Vite-style mounts like `/io/chat`), and send `X-Forwarded-Prefix` upstream so Flask's `url_for` can prepend it:
+Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Two directives — a redirect for bare `/saturn` and the path-stripped reverse proxy for everything under it:
 
 ```caddyfile
+redir /saturn /saturn/ 308
+
 handle_path /saturn/* {
     reverse_proxy localhost:5043 {
         header_up X-Forwarded-Prefix /saturn
@@ -77,7 +79,7 @@ handle_path /saturn/* {
 }
 ```
 
-The `header_up` is load-bearing. Without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (scripts/start.sh sets it on the sm-managed deployment), so a direct-to-gunicorn caller cannot spoof a prefix.
+The `redir` is load-bearing: `handle_path /saturn/*` does not match the bare `/saturn` URL, which otherwise falls through to whatever static file_server is behind it. The `header_up` is also load-bearing: without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (scripts/start.sh sets it on the sm-managed deployment), so a direct-to-gunicorn caller cannot spoof a prefix.
 
 Apply via `@geepers_caddy` (sole authority — do not hand-edit). Then:
 
