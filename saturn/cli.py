@@ -111,6 +111,25 @@ app = typer.Typer(
 console = Console()
 
 
+def _emit_outputs(
+    data,
+    *,
+    out: Path,
+    findings: Path,
+    open_browser: bool,
+    render,
+    write,
+) -> None:
+    """Render HTML + write findings + optionally open browser. Same UX in all commands."""
+    out_path = render(data, out)
+    findings_path = write(data, findings)
+    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
+    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
+    if open_browser:
+        import webbrowser
+        webbrowser.open(out_path.as_uri())
+
+
 def _run_full(
     source: str,
     *,
@@ -151,15 +170,10 @@ def _run_full(
 
     _maybe_run_insights(data, llm_spec)
 
-    out_path = render_html(data, out)
-    findings_path = write_findings(data, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
-    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(out_path.as_uri())
+    _emit_outputs(
+        data, out=out, findings=findings, open_browser=open_browser,
+        render=render_html, write=write_findings,
+    )
 
 
 def _run_sampled(
@@ -215,15 +229,10 @@ def _run_sampled(
 
     _maybe_run_insights(data, llm_spec)
 
-    out_path = render_html(data, out)
-    findings_path = write_findings(data, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
-    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(out_path.as_uri())
+    _emit_outputs(
+        data, out=out, findings=findings, open_browser=open_browser,
+        render=render_html, write=write_findings,
+    )
 
 
 def _print_summary(schema: dict[str, str], results, row_count: int | None) -> None:
@@ -425,15 +434,10 @@ def compare(
 
     _maybe_run_compare_insights(report, llm_spec)
 
-    out_path = render_compare_html(report, out)
-    findings_path = write_compare_findings(report, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
-    console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
-
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(out_path.as_uri())
+    _emit_outputs(
+        report, out=out, findings=findings, open_browser=open_browser,
+        render=render_compare_html, write=write_compare_findings,
+    )
 
 
 def _print_compare_summary(report) -> None:
