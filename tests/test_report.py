@@ -118,3 +118,48 @@ def test_to_findings_omits_insights_key_when_bundle_absent():
     )
     findings = report.to_findings()
     assert "insights" not in findings
+
+
+def test_render_html_includes_insight_narrative_when_present(tmp_path):
+    from saturn.insights import Insight, InsightBundle
+    from saturn.profilers import ProfileResult
+    from saturn.report import assemble, render_html
+
+    results = [
+        ProfileResult(
+            column="alt_text",
+            kind="text",
+            n=10,
+            n_null=0,
+            n_unique=10,
+            stats={},
+            extras={},
+            alerts=[],
+        )
+    ]
+    report = assemble(
+        source="s",
+        row_count=10,
+        sampled_rows=10,
+        seed=0,
+        schema={"alt_text": "text"},
+        results=results,
+        mode="full",
+    )
+    report.insight_bundle = InsightBundle(
+        providers=["anthropic:claude-sonnet-4-6"],
+        insights=[
+            Insight(
+                scope="column",
+                target="alt_text",
+                narrative="DISTINCTIVE-NARRATIVE-STRING",
+                confidence="high",
+                evidence_keys=[],
+                model="anthropic:claude-sonnet-4-6",
+            )
+        ],
+    )
+    out = render_html(report, tmp_path / "r.html")
+    html = out.read_text()
+    assert "DISTINCTIVE-NARRATIVE-STRING" in html
+    assert "anthropic:claude-sonnet-4-6" in html
