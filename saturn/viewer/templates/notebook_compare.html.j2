@@ -1,0 +1,201 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ doc.a_label }} vs {{ doc.b_label }} — saturn notebook{% endblock %}
+{% block head_extra %}
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+{% endblock %}
+{% block main %}
+
+{% set ns = namespace(cell=0) %}
+{% set insights = doc.raw.get('insights', {}) %}
+{% set insight_items = insights.get('insights', []) %}
+{% set global_insight = insight_items | selectattr('target', 'equalto', '__global__') | first %}
+{% set col_insights = {} %}
+{% for ci in insight_items %}{% if col_insights.update({ci.target: ci}) %}{% endif %}{% endfor %}
+
+<section class="nb" aria-label="Compare notebook">
+
+  <header class="nb-head">
+    <p class="breadcrumb"><a href="{{ url_for('index') }}">← all readings</a></p>
+    <h1>{{ doc.a_label }} <em>vs</em> {{ doc.b_label }}</h1>
+    <div class="nb-meta">
+      <span>saturn compare notebook · generated {{ doc.raw.generated_at[:10] }}</span>
+      <span class="nb-view-toggle">
+        <a href="{{ url_for('view', id=doc.id, view='report') }}" class="muted">Report</a>
+        <span aria-current="page">Notebook</span>
+      </span>
+    </div>
+  </header>
+
+  {# ---- overview cell ---- #}
+  {% set ns.cell = ns.cell + 1 %}
+  <article class="cell cell-md">
+    <div class="gutter"></div>
+    <div class="cell-body">
+      <h2>Overview</h2>
+      <p>
+        Pair of datasets compared column-by-column.
+        <strong>{{ doc.a_label }}</strong> has {{ "{:,}".format(doc.raw.a.row_count or 0) }} rows;
+        <strong>{{ doc.b_label }}</strong> has {{ "{:,}".format(doc.raw.b.row_count or 0) }} rows.
+        Divergence score combines normalised null drift, mean/length delta, entropy delta,
+        top-value jaccard, and language-mix jaccard. Every term is capped at 1.0.
+      </p>
+    </div>
+  </article>
+
+  {# ---- reproduction code cell ---- #}
+  {% set ns.cell = ns.cell + 1 %}
+  <article class="cell cell-code">
+    <div class="gutter">[{{ ns.cell }}]:</div>
+    <pre class="cell-body"><code>!pip install saturn-dissect
+import subprocess
+subprocess.run([
+    "saturn", "compare",
+    "{{ doc.raw.a.source }}", "{{ doc.raw.b.source }}",
+    "--label-a", "{{ doc.a_label }}",
+    "--label-b", "{{ doc.b_label }}",
+    "--findings", "{{ doc.id }}.json",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+])</code></pre>
+  </article>
+
+  {# ---- global compare insight ---- #}
+  {% if global_insight %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md cell-insight">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <h3>Summary <small class="conf conf-{{ global_insight.confidence }}">confidence: {{ global_insight.confidence }}</small></h3>
+        <p>{{ global_insight.narrative }}</p>
+        {% if global_insight.evidence_keys %}
+          <p class="evidence">citing: {{ global_insight.evidence_keys | join(' · ') }}</p>
+        {% endif %}
+        {% if global_insight.critiques %}
+          <div class="critiques">
+            {% for c in global_insight.critiques %}
+              <p><span class="verdict verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+                <em>{{ c.reviewer_model }}</em>: {{ c.reason }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </article>
+  {% else %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <div class="missing">
+          <p>No plain-language summary on this compare yet.</p>
+          <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
+            <button class="btn" type="submit">Generate compare summary with {{ default_llm }}</button>
+          </form>
+        </div>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- divergence ranking output ---- #}
+  {% if doc.raw.divergences %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-output">
+      <div class="gutter">Out[{{ ns.cell }}]:</div>
+      <div class="cell-body">
+        <p class="df-caption"><code>report.divergence_summary()</code></p>
+        <div class="df">
+          <table>
+            <thead>
+              <tr><th>column</th><th>kind</th><th>score</th><th>signals</th></tr>
+            </thead>
+            <tbody>
+              {% for d in doc.raw.divergences %}
+                <tr>
+                  <td class="col-name"><a href="#cell-col-{{ d.column }}">{{ d.column }}</a></td>
+                  <td class="dtype">{{ d.kind }}</td>
+                  <td>{{ "%.2f" | format(d.score) }}</td>
+                  <td>{{ d.signals | join(', ') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- per-column cells ---- #}
+  {% for c in doc.raw.columns %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md" id="cell-col-{{ c.column }}">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <h3>{{ c.column }} <small class="chip">{{ c.kind }}</small></h3>
+        {% set ci = col_insights.get(c.column) %}
+        {% if ci %}
+          <blockquote class="insight">
+            <p>{{ ci.narrative }}</p>
+            <footer><em>{{ ci.model }}</em> · confidence {{ ci.confidence }}</footer>
+          </blockquote>
+        {% endif %}
+      </div>
+    </article>
+
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-output">
+      <div class="gutter">Out[{{ ns.cell }}]:</div>
+      <div class="cell-body">
+        <p class="df-caption"><code>report.columns["{{ c.column }}"].delta</code></p>
+        <div class="df">
+          <table>
+            <thead>
+              <tr><th>stat</th><th>{{ doc.a_label }}</th><th>{{ doc.b_label }}</th><th>Δ</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>n</td>
+                <td>{{ "{:,}".format(c.a.n) if c.a else "—" }}</td>
+                <td>{{ "{:,}".format(c.b.n) if c.b else "—" }}</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>null rate</td>
+                <td>{{ "%.1f%%" | format((c.a.null_rate or 0) * 100) if c.a else "—" }}</td>
+                <td>{{ "%.1f%%" | format((c.b.null_rate or 0) * 100) if c.b else "—" }}</td>
+                <td>{% if 'null_rate_delta' in c.delta %}{{ "%+.1f%%" | format(c.delta['null_rate_delta'] * 100) }}{% else %}—{% endif %}</td>
+              </tr>
+              <tr>
+                <td>unique</td>
+                <td>{{ "{:,}".format(c.a.n_unique) if c.a and c.a.n_unique is not none else "—" }}</td>
+                <td>{{ "{:,}".format(c.b.n_unique) if c.b and c.b.n_unique is not none else "—" }}</td>
+                <td>—</td>
+              </tr>
+              {% for k, v in c.delta.items() if k.endswith('_delta') and k != 'null_rate_delta' %}
+                <tr><td>{{ k }}</td><td>—</td><td>—</td><td>{% if v is number %}{{ "%+.3g" | format(v) }}{% else %}{{ v }}{% endif %}</td></tr>
+              {% endfor %}
+              {% if c.delta.get('top_value_jaccard') is not none %}
+                <tr><td>top-value jaccard</td><td colspan="2">—</td><td>{{ "%.2f" | format(c.delta['top_value_jaccard']) }}</td></tr>
+              {% endif %}
+              {% if c.delta.get('language_jaccard') is not none %}
+                <tr><td>language jaccard</td><td colspan="2">—</td><td>{{ "%.2f" | format(c.delta['language_jaccard']) }}</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  {% endfor %}
+
+  <footer class="nb-foot" aria-label="Reproducibility metadata">
+    <dl>
+      <dt>saturn</dt><dd>v{{ doc.raw.saturn_version or '?' }}</dd>
+      <dt>generated</dt><dd>{{ doc.raw.generated_at }}</dd>
+      {% if insights.providers %}
+        <dt>insight models</dt><dd>{{ insights.providers | join(', ') }}</dd>
+        <dt>prompt version</dt><dd>saturn-insight-v1</dd>
+      {% endif %}
+      <dt>raw JSON</dt><dd><a href="{{ url_for('api_findings', id=doc.id) }}">findings.json</a></dd>
+    </dl>
+  </footer>
+
+</section>
+
+{% endblock %}

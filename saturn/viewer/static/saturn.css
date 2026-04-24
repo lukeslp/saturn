@@ -993,3 +993,338 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ========== notebook view =============================================== */
+
+.nb {
+  grid-column: 1 / -1;
+  max-width: 1080px;
+  margin: 0 auto;
+  font-family: var(--font-body);
+}
+
+.nb-head {
+  padding-bottom: calc(var(--step) * 3);
+  margin-bottom: calc(var(--step) * 4);
+  border-bottom: 2px solid var(--ink);
+}
+.nb-head .breadcrumb {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: calc(var(--step) * 2);
+}
+.nb-head h1 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 144, "wght" 500, "SOFT" 40;
+  font-size: clamp(2rem, 3vw + 1rem, 3rem);
+  margin: 0 0 calc(var(--step) * 2) 0;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  word-break: break-word;
+}
+.nb-head h1 em {
+  font-style: italic;
+  color: var(--muted);
+  font-variation-settings: "opsz" 144, "wght" 300, "WONK" 1;
+}
+.nb-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  color: var(--muted);
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 2);
+}
+
+.nb-view-toggle {
+  display: inline-flex;
+  gap: calc(var(--step) * 1);
+  align-items: center;
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.nb-view-toggle a {
+  text-decoration: none;
+  padding: 4px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+}
+.nb-view-toggle a:hover { background: var(--hot); color: var(--paper); border-color: var(--hot); }
+.nb-view-toggle span[aria-current] {
+  padding: 4px 8px;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 2px;
+}
+
+/* cell layout */
+.cell {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: calc(var(--step) * 2);
+  margin: calc(var(--step) * 2) 0;
+  align-items: start;
+}
+.cell .gutter {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  color: var(--muted);
+  text-align: right;
+  padding-top: calc(var(--step) * 1);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.cell .cell-body {
+  min-width: 0;
+  border-left: 1px solid var(--rule);
+  padding: calc(var(--step) * 1) calc(var(--step) * 2);
+}
+@media (max-width: 640px) {
+  .cell { grid-template-columns: 44px 1fr; gap: calc(var(--step) * 1); }
+  .cell .gutter { font-size: 0.6rem; }
+}
+
+/* markdown cells */
+.cell-md .cell-body { border-left-color: transparent; }
+.cell-md h2 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "wght" 650, "SOFT" 30;
+  font-size: var(--size-h2);
+  margin: 0 0 calc(var(--step) * 2) 0;
+  letter-spacing: -0.015em;
+}
+.cell-md h3 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "wght" 600, "SOFT" 30;
+  font-size: var(--size-h3);
+  margin: 0 0 calc(var(--step) * 1.5) 0;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--step) * 1.5);
+  flex-wrap: wrap;
+}
+.cell-md h3 .chip {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  font-weight: 400;
+}
+.cell-md p {
+  font-size: var(--size-body);
+  line-height: 1.6;
+  max-width: var(--measure);
+  margin: 0 0 calc(var(--step) * 1.5) 0;
+}
+.cell-md code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--paper-raise);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.cell-md .conf {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+.conf-high { background: rgba(47, 108, 63, 0.16); color: var(--good); }
+.conf-medium { background: rgba(178, 106, 0, 0.16); color: var(--warn); }
+.conf-low { background: var(--hot-wash); color: var(--hot); }
+
+.cell-insight .cell-body {
+  border-left: 3px solid var(--hot);
+  background: var(--paper-raise);
+}
+
+.cell-md .evidence {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.cell-md .critiques {
+  margin-top: calc(var(--step) * 2);
+  padding-top: calc(var(--step) * 2);
+  border-top: 1px solid var(--rule);
+}
+.cell-md .critiques p {
+  font-size: var(--size-small);
+  display: flex;
+  gap: calc(var(--step) * 1);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.cell-md .verdict {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.cell-md .insight {
+  margin: 0 0 calc(var(--step) * 2) 0;
+  padding: calc(var(--step) * 2) calc(var(--step) * 2.5);
+  border-left: 2px solid var(--cool);
+  background: var(--paper-raise);
+  font-size: var(--size-body);
+}
+.cell-md .insight p {
+  max-width: none;
+  margin: 0 0 calc(var(--step) * 1) 0;
+}
+.cell-md .insight footer {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cell-md .missing {
+  background: var(--paper-raise);
+  border: 1px dashed var(--rule-strong);
+  padding: calc(var(--step) * 2.5);
+}
+.cell-md .missing p {
+  margin: 0 0 calc(var(--step) * 1.5) 0;
+}
+
+/* code cells — the In[n]: block */
+.cell-code .cell-body {
+  background: var(--paper-raise);
+  border-left: 3px solid var(--cool);
+  padding: calc(var(--step) * 2);
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  margin: 0;
+}
+.cell-code .cell-body code { color: var(--ink); }
+
+/* output cells — dataframe-style tables */
+.cell-output .cell-body {
+  border-left-color: var(--rule-strong);
+}
+.cell-output .df-caption {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 calc(var(--step) * 1) 0;
+}
+.cell-output .df-caption code {
+  background: transparent;
+  padding: 0;
+  font-size: 1em;
+  color: var(--ink);
+}
+.cell-output .df {
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper);
+}
+.cell-output .df-narrow { max-width: 420px; }
+.cell-output .df table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.cell-output .df th,
+.cell-output .df td {
+  text-align: left;
+  padding: calc(var(--step) * 1) calc(var(--step) * 1.5);
+  border-bottom: 1px solid var(--rule);
+}
+.cell-output .df th {
+  font-size: var(--size-eyebrow);
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  background: var(--paper-raise);
+  position: sticky;
+  top: 0;
+}
+.cell-output .df td.col-name a { color: var(--ink); text-decoration: none; }
+.cell-output .df td.col-name a:hover { color: var(--hot); text-decoration: underline; }
+.cell-output .df td.dtype { color: var(--cool); }
+
+/* figure cells */
+.cell-figure .cell-body { border-left: 2px solid var(--warn); }
+.cell-figure figure {
+  margin: 0;
+  background: var(--paper);
+  padding: calc(var(--step) * 1) 0;
+}
+.cell-figure figure > div {
+  /* plotly emits a <div> wrapper — keep it flexible */
+  max-width: 100%;
+}
+.cell-figure figcaption {
+  font-family: var(--font-body);
+  font-size: var(--size-small);
+  font-style: italic;
+  color: var(--muted);
+  margin-top: calc(var(--step) * 1);
+  line-height: 1.5;
+  max-width: var(--measure);
+}
+.cell-figure figcaption code {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--paper-raise);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+/* reproducibility footer */
+.nb-foot {
+  margin-top: calc(var(--step) * 6);
+  padding-top: calc(var(--step) * 3);
+  border-top: 2px solid var(--ink);
+}
+.nb-foot dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: calc(var(--step) * 0.75) calc(var(--step) * 2);
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  margin: 0;
+}
+.nb-foot dt {
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.nb-foot dd {
+  margin: 0;
+  word-break: break-all;
+}
+.nb-foot dd a { color: var(--ink); }
+
+/* Report view also gets a toggle link back to notebook — appended inline by templates */

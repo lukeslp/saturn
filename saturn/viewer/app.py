@@ -122,11 +122,62 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         if path is None or not path.is_file():
             abort(404)
         doc = load_findings(path)
-        template = "profile.html.j2" if doc.kind is FindingsKind.PROFILE else "compare.html.j2"
+        view_mode = request.args.get("view", "report").lower()
+        if view_mode not in {"report", "notebook"}:
+            view_mode = "report"
+
+        charts, overview_chart = {}, None
+        if view_mode == "notebook" and doc.kind is FindingsKind.PROFILE:
+            from ..charts import (
+                chart_for,
+                correlation_heatmap,
+                dataset_overview_chart,
+                language_chart,
+            )
+            from ..report import ReportData
+
+            report = ReportData.from_findings(doc.raw)
+            for result in report.results:
+                try:
+                    charts[result.column] = chart_for(result)
+                except Exception:
+                    charts[result.column] = None
+            overview_chart = dataset_overview_chart(
+                [(r.column, r.null_rate) for r in report.results]
+            )
+            lang_counts = doc.raw.get("language_counts", {})
+            charts["__languages__"] = language_chart(lang_counts) if lang_counts else None
+            # Correlation across numeric columns
+            import numpy as np
+            numeric = [r for r in report.results
+                       if r.kind == "numeric" and r.extras.get("sample")]
+            if len(numeric) >= 2:
+                try:
+                    max_len = min(len(r.extras["sample"]) for r in numeric)
+                    mat = np.vstack(
+                        [np.asarray(r.extras["sample"][:max_len]) for r in numeric]
+                    )
+                    corr = np.corrcoef(mat)
+                    charts["__correlation__"] = correlation_heatmap(
+                        corr.tolist(), [r.column for r in numeric]
+                    )
+                except Exception:
+                    charts["__correlation__"] = None
+
+        template_name = {
+            ("report", "profile"): "profile.html.j2",
+            ("report", "compare"): "compare.html.j2",
+            ("notebook", "profile"): "notebook_profile.html.j2",
+            ("notebook", "compare"): "notebook_compare.html.j2",
+        }[(view_mode, doc.kind.value)]
+
         return render_template(
-            template,
+            template_name,
             doc=doc,
             default_llm=app.config["SATURN_DEFAULT_LLM"],
+            view_mode=view_mode,
+            charts=charts,
+            overview_chart=overview_chart,
         )
 
     @app.get("/api/findings/<id>")
