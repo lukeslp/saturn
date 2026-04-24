@@ -1,0 +1,275 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ doc.id }} — saturn notebook{% endblock %}
+{% block head_extra %}
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+{% endblock %}
+{% block main %}
+
+{# ===== helper namespace for execution counters ===== #}
+{% set ns = namespace(cell=0) %}
+
+{% set insights = doc.raw.get('insights', {}) %}
+{% set insight_items = insights.get('insights', []) %}
+{% set dataset_insight = insight_items | selectattr('target', 'equalto', '__global__') | first %}
+{% set col_insights = {} %}
+{% for ci in insight_items %}{% if col_insights.update({ci.target: ci}) %}{% endif %}{% endfor %}
+
+<section class="nb" aria-label="Notebook document">
+
+  {# ---- header + view toggle ---- #}
+  <header class="nb-head">
+    <p class="breadcrumb"><a href="{{ url_for('index') }}">← all readings</a></p>
+    <h1>{{ doc.id.replace('-', ' ').replace('_', ' ') }}</h1>
+    <div class="nb-meta">
+      <span>saturn notebook · generated {{ doc.meta.generated_at[:10] }}</span>
+      <span class="nb-view-toggle">
+        <a href="{{ url_for('view', id=doc.id, view='report') }}" class="muted">Report</a>
+        <span aria-current="page">Notebook</span>
+      </span>
+    </div>
+  </header>
+
+  {# ---- Cell 1 ▸ markdown overview ---- #}
+  {% set ns.cell = ns.cell + 1 %}
+  <article class="cell cell-md">
+    <div class="gutter"></div>
+    <div class="cell-body">
+      <h2>Overview</h2>
+      <p><strong>Source:</strong> <code>{{ doc.meta.source }}</code></p>
+      <p>
+        Saturn profiled <strong>{{ "{:,}".format(doc.meta.row_count or 0) }}</strong> rows across
+        <strong>{{ doc.columns | length }}</strong> columns. The stats below are deterministic and
+        machine-readable; the prose is a language-model interpretation of those stats (opt-in,
+        added after the fact, never sees raw rows).
+      </p>
+    </div>
+  </article>
+
+  {# ---- Cell 2 ▸ code cell: how to reproduce ---- #}
+  {% set ns.cell = ns.cell + 1 %}
+  <article class="cell cell-code">
+    <div class="gutter">[{{ ns.cell }}]:</div>
+    <pre class="cell-body"><code>{%- if doc.meta.source.startswith('hf://') -%}
+!pip install saturn-dissect
+import subprocess
+subprocess.run([
+    "saturn", "huggingface", "{{ doc.meta.source.removeprefix('hf://') }}",
+    "--findings", "{{ doc.id }}.json",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+])
+{%- else -%}
+!pip install saturn-dissect
+import subprocess
+subprocess.run([
+    "saturn", "analyze", "{{ doc.meta.source }}",
+    "--findings", "{{ doc.id }}.json",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+])
+{%- endif %}</code></pre>
+  </article>
+
+  {# ---- Cell 3 ▸ dataset-scope markdown insight (when present) ---- #}
+  {% if dataset_insight %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md cell-insight">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <h3>Summary <small class="conf conf-{{ dataset_insight.confidence }}">confidence: {{ dataset_insight.confidence }}</small></h3>
+        <p>{{ dataset_insight.narrative }}</p>
+        {% if dataset_insight.evidence_keys %}
+          <p class="evidence">citing: {{ dataset_insight.evidence_keys | join(' · ') }}</p>
+        {% endif %}
+        {% if dataset_insight.critiques %}
+          <div class="critiques">
+            {% for c in dataset_insight.critiques %}
+              <p><span class="verdict verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+                <em>{{ c.reviewer_model }}</em>: {{ c.reason }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </article>
+  {% else %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <div class="missing">
+          <p>No plain-language summary on this reading yet.</p>
+          <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
+            <button class="btn" type="submit">Generate summary with {{ default_llm }}</button>
+          </form>
+        </div>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- Cell 4 ▸ output: schema dataframe ---- #}
+  {% set ns.cell = ns.cell + 1 %}
+  <article class="cell cell-output">
+    <div class="gutter">Out[{{ ns.cell }}]:</div>
+    <div class="cell-body">
+      <p class="df-caption"><code>saturn.schema()</code> &middot; {{ doc.columns | length }} columns</p>
+      <div class="df">
+        <table>
+          <thead>
+            <tr>
+              <th>column</th>
+              <th>kind</th>
+              <th>n</th>
+              <th>null%</th>
+              <th>unique</th>
+              <th>alerts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in doc.columns %}
+              <tr>
+                <td class="col-name"><a href="#cell-col-{{ c.column }}">{{ c.column }}</a></td>
+                <td class="dtype">{{ c.kind }}</td>
+                <td>{{ "{:,}".format(c.n) }}</td>
+                <td>{{ "%.1f%%" | format((c.null_rate or 0) * 100) }}</td>
+                <td>{{ "{:,}".format(c.n_unique) if c.n_unique is not none else "—" }}</td>
+                <td>
+                  {% for a in c.alerts %}
+                    <span class="alert alert-{{ a.level }}">{{ a.code }}</span>
+                  {% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+
+  {# ---- Cell 5 ▸ figure: dataset overview ---- #}
+  {% if overview_chart %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-figure">
+      <div class="gutter">Fig&nbsp;1.</div>
+      <div class="cell-body">
+        <figure>
+          {{ overview_chart | safe }}
+          <figcaption>Per-column null rate across the corpus. Columns are ordered by input position.</figcaption>
+        </figure>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- Cell 6 ▸ figure: languages (if any) ---- #}
+  {% if charts.get('__languages__') %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-figure">
+      <div class="gutter">Fig&nbsp;2.</div>
+      <div class="cell-body">
+        <figure>
+          {{ charts['__languages__'] | safe }}
+          <figcaption>Language mix across all text columns (per-string detection, sampled).</figcaption>
+        </figure>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- Cell 7 ▸ figure: correlation heatmap (if ≥2 numeric) ---- #}
+  {% if charts.get('__correlation__') %}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-figure">
+      <div class="gutter">Fig&nbsp;3.</div>
+      <div class="cell-body">
+        <figure>
+          {{ charts['__correlation__'] | safe }}
+          <figcaption>Pearson correlation across numeric columns (sampled, bounded).</figcaption>
+        </figure>
+      </div>
+    </article>
+  {% endif %}
+
+  {# ---- Per-column sections ---- #}
+  {% set fig_no = namespace(n=3) %}
+  {% for c in doc.columns %}
+    {# markdown: column heading + LLM insight #}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-md" id="cell-col-{{ c.column }}">
+      <div class="gutter"></div>
+      <div class="cell-body">
+        <h3>{{ c.column }} <small class="chip">{{ c.kind }}</small></h3>
+        {% set ci = col_insights.get(c.column) %}
+        {% if ci %}
+          <blockquote class="insight">
+            <p>{{ ci.narrative }}</p>
+            <footer><em>{{ ci.model }}</em> · confidence {{ ci.confidence }}</footer>
+          </blockquote>
+        {% endif %}
+      </div>
+    </article>
+
+    {# output: stats table #}
+    {% set ns.cell = ns.cell + 1 %}
+    <article class="cell cell-output">
+      <div class="gutter">Out[{{ ns.cell }}]:</div>
+      <div class="cell-body">
+        <p class="df-caption"><code>saturn.columns["{{ c.column }}"].stats</code></p>
+        <div class="df df-narrow">
+          <table>
+            <thead><tr><th>stat</th><th>value</th></tr></thead>
+            <tbody>
+              <tr><td>n</td><td>{{ "{:,}".format(c.n) }}</td></tr>
+              <tr><td>nulls</td><td>{{ "{:,}".format(c.n_null) }} ({{ "%.1f%%" | format((c.null_rate or 0) * 100) }})</td></tr>
+              <tr><td>unique</td><td>{{ "{:,}".format(c.n_unique) if c.n_unique is not none else "—" }}</td></tr>
+              {% for k, v in (c.stats or {}).items() %}
+                <tr><td>{{ k }}</td><td>
+                  {% if v is number %}{% if v == (v | int) and v | abs < 1000000 %}{{ "{:,}".format(v | int) }}{% else %}{{ "{:.4g}".format(v) }}{% endif %}{% else %}{{ v }}{% endif %}
+                </td></tr>
+              {% endfor %}
+              {% for a in c.alerts %}
+                <tr><td>alert: {{ a.code }}</td><td>{{ a.message }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+
+    {# figure: column chart #}
+    {% if charts.get(c.column) %}
+      {% set fig_no.n = fig_no.n + 1 %}
+      {% set ns.cell = ns.cell + 1 %}
+      <article class="cell cell-figure">
+        <div class="gutter">Fig&nbsp;{{ fig_no.n }}.</div>
+        <div class="cell-body">
+          <figure>
+            {{ charts[c.column] | safe }}
+            <figcaption>
+              {% if c.kind == 'numeric' %}Distribution of <code>{{ c.column }}</code>. Vertical dash marks the median.
+              {% elif c.kind == 'categorical' %}Top values for <code>{{ c.column }}</code>.
+              {% elif c.kind == 'text' %}Character-length distribution for <code>{{ c.column }}</code>.
+              {% else %}Chart for <code>{{ c.column }}</code>.{% endif %}
+            </figcaption>
+          </figure>
+        </div>
+      </article>
+    {% endif %}
+  {% endfor %}
+
+  {# ---- Reproducibility footer ---- #}
+  <footer class="nb-foot" aria-label="Reproducibility metadata">
+    <dl>
+      <dt>saturn</dt><dd>v{{ doc.raw.saturn_version or '?' }}</dd>
+      <dt>mode</dt><dd>{{ doc.meta.mode }}</dd>
+      <dt>seed</dt><dd>{{ doc.meta.seed }}</dd>
+      <dt>generated</dt><dd>{{ doc.meta.generated_at }}</dd>
+      {% if insights.providers %}
+        <dt>insight models</dt><dd>{{ insights.providers | join(', ') }}</dd>
+        <dt>prompt version</dt><dd>saturn-insight-v1</dd>
+        {% if insights.total_usage %}
+          <dt>tokens</dt><dd>{{ "{:,}".format(insights.total_usage.get('total_tokens', insights.total_usage.get('input_tokens', 0) + insights.total_usage.get('output_tokens', 0))) }}</dd>
+        {% endif %}
+      {% endif %}
+      <dt>raw JSON</dt><dd><a href="{{ url_for('api_findings', id=doc.id) }}">findings.json</a></dd>
+    </dl>
+  </footer>
+
+</section>
+
+{% endblock %}

@@ -15,6 +15,10 @@
     <span><strong>{{ doc.raw.columns | length }}</strong> columns compared</span>
     <span>generated <strong>{{ doc.raw.generated_at[:10] }}</strong></span>
     <span><a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a></span>
+    <span class="nb-view-toggle" style="margin-left: auto;">
+      <span aria-current="page">Report</span>
+      <a href="{{ url_for('view', id=doc.id, view='notebook') }}">Notebook</a>
+    </span>
   </div>
 </header>
 
