@@ -4,7 +4,27 @@ Dataset dissector. Point it at a HuggingFace repo, a local file, or a slice of e
 
 Generic across domains: alt-text, Bluesky firehose, census tables, VQA annotations all work out of the box.
 
+**Live demo:** [dr.eamer.dev/saturn](https://dr.eamer.dev/saturn) — drop a CSV/Parquet/XLSX file or paste a HuggingFace repo id, get a notebook-style reading with a plain-language summary, role-tagged columns, and downloadable `.ipynb`.
+
 Primary use case: [lukeslp/bluesky-alt-text](https://huggingface.co/datasets/lukeslp/bluesky-alt-text), 404,841 image descriptions, profiled in 46 s, compared across the curated/firehose split in 18 s.
+
+## How saturn differs from other profilers
+
+| | saturn | ydata-profiling | sweetviz | dataprep |
+|---|---|---|---|---|
+| Default scan | **full corpus** (polars-native) | sample with cap | full corpus (pandas) | full corpus |
+| Bounded memory on wide text | **yes** (vocab caps, near-unique skip) | partial | partial | partial |
+| Compare mode | **pairwise + composite divergence score** | pairwise overlay | pairwise (its specialty) | no |
+| LLM-narrated reading | **yes, opt-in, catfish-critic** | no | no | no |
+| Per-column LLM role + treatment | **yes** | no | no | no |
+| JSON sidecar matching the HTML | **yes** | partial | no | no |
+| Notebook view (`?view=notebook`) | **yes** | no | no | no |
+| Real `.ipynb` export | **yes** (`/view/<id>.ipynb`) | no | no | no |
+| Live web viewer with upload form | **yes** (Flask, port 5043) | no | no | no |
+| WCAG 2.2 AA structural guards | **yes** (tested) | no | no | no |
+| Multilingual at scale | **yes** (fasttext lid.176, ~1M docs/s) | basic | basic | basic |
+
+The bold cells are the columns where saturn was built specifically. The deterministic stats pass is always free; the LLM pass is one extra flag and is the differentiator if you've ever asked yourself "what *is* this dataset, plain English."
 
 ## Install
 
@@ -93,7 +113,19 @@ Requires `~/shared/llm_providers` on `PYTHONPATH` (the unified provider gateway)
 
 ## Status
 
-Phase 1 (stats + HTML + JSON), Phase 2 (`--llm` insight pass with catfish critic, all commands), Phase 2.5 (compare-mode insights with pair evidence and delta-aware prompts), Phase 4 (compare mode, curated-vs-firehose diff), and Phase 5 (Flask viewer on port 5043) are all shipping. Phase 3 (BERTopic clustering) on the roadmap.
+All shipping:
+- Stats pass (Phase 1) — full-corpus polars profiling, HTML + JSON output
+- LLM insight pass (Phase 2) — `--llm provider[:model]`, catfish critic on a second `--llm`, all commands
+- Compare-mode insights (Phase 2.5) — pair evidence, delta-aware prompts
+- Compare mode (Phase 4) — composite divergence score, streaming fallback
+- Flask viewer (Phase 5) — `saturn serve --port 5043`, drop-zone upload, HF analysis, WCAG 2.2 AA
+- Notebook view — `?view=notebook` toggle with cell gutters + inline plots
+- `.ipynb` export — `/view/<id>.ipynb` returns valid nbformat, matplotlib plots per column
+- LLM-curated columns (prompt v2) — per-column `role` and `treatment` chips, dataset-level `featured_charts`
+- Citation block — BibTeX + APA on every finding, click to copy
+- Style guide — `/styleguide` reference with copy-pasteable markup
+
+On the roadmap: Phase 3 (BERTopic clustering via `[nlp]` extra), multi-sheet XLSX picker, Plotly a11y data-table fallback.
 
 ## License
 
