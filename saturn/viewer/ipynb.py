@@ -24,10 +24,15 @@ beside the .ipynb if you fetch from the viewer's bundled-export endpoint).
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 NBFORMAT = 4
 NBFORMAT_MINOR = 5
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex[:8]
 
 
 def _md(source: str) -> dict[str, Any]:
@@ -57,11 +62,17 @@ def _ensure_lines(source: str) -> list[str]:
 
 
 def _md_lines(source: str) -> dict[str, Any]:
-    return {"cell_type": "markdown", "metadata": {}, "source": _ensure_lines(source)}
+    return {
+        "id": _new_id(),
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": _ensure_lines(source),
+    }
 
 
 def _code_lines(source: str) -> dict[str, Any]:
     return {
+        "id": _new_id(),
         "cell_type": "code",
         "metadata": {},
         "execution_count": None,
