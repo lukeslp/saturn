@@ -122,10 +122,13 @@ All shipping:
 - Notebook view — `?view=notebook` toggle with cell gutters + inline plots
 - `.ipynb` export — `/view/<id>.ipynb` returns valid nbformat, matplotlib plots per column
 - LLM-curated columns (prompt v2) — per-column `role` and `treatment` chips, dataset-level `featured_charts`
+- Multi-sheet workbooks — `--sheet NAME_OR_INDEX` for XLSX/XLS/XLSB/ODS, warns when a workbook has multiple sheets
+- A11y data-table fallback — every Plotly chart has a `<details>Show data table</details>` companion for screen readers
 - Citation block — BibTeX + APA on every finding, click to copy
+- Per-finding annotations — drop a `<id>.notes.md` next to the JSON, viewer renders it (markdown sanitised)
 - Style guide — `/styleguide` reference with copy-pasteable markup
 
-On the roadmap: Phase 3 (BERTopic clustering via `[nlp]` extra), multi-sheet XLSX picker, Plotly a11y data-table fallback.
+On the roadmap: Phase 3 (BERTopic clustering via `[nlp]` extra), SSE progress for long analyze-hf jobs.
 
 ## License
 
