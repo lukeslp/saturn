@@ -1328,3 +1328,52 @@ a:focus-visible {
 .nb-foot dd a { color: var(--ink); }
 
 /* Report view also gets a toggle link back to notebook — appended inline by templates */
+
+/* BYOK form section */
+.byok {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: calc(var(--step) * 1) calc(var(--step) * 1.5);
+  background: var(--paper);
+}
+.byok summary {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  padding: calc(var(--step) * 0.5) 0;
+}
+.byok summary::-webkit-details-marker { display: none; }
+.byok summary::before { content: "+ "; color: var(--hot); }
+.byok[open] summary::before { content: "− "; }
+.byok label {
+  display: block;
+  margin-top: calc(var(--step) * 1);
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.byok input,
+.byok select {
+  width: 100%;
+  margin-top: calc(var(--step) * 0.5);
+  padding: calc(var(--step) * 1.25);
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  background: var(--paper-raise);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+.byok input:focus-visible,
+.byok select:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: -1px;
+  border-color: var(--hot);
+}
+.byok p.hint { margin: calc(var(--step) * 1) 0; }

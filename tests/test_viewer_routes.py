@@ -46,11 +46,12 @@ def test_analyze_upload_redirects_to_job_page(client, monkeypatch):
     assert resp.status_code == 302
     assert "/jobs/jobtest" in resp.headers["Location"]
     assert captured["kind"] == "analyze-upload"
-    # args: findings_dir, upload_path, finding_id, provider
-    findings_dir, upload_path, finding_id, provider = captured["args"]
+    # args: findings_dir, upload_path, finding_id, provider, api_key
+    findings_dir, upload_path, finding_id, provider, api_key = captured["args"]
     assert upload_path.name == "tiny.csv"
     assert finding_id == "tiny"
     assert provider == "anthropic"  # default
+    assert api_key is None  # no BYOK in this test
 
 
 def test_analyze_upload_rejects_bad_extension(client):
@@ -86,7 +87,7 @@ def test_analyze_upload_honors_no_llm_checkbox(client, monkeypatch):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 302
-    _dir, _path, _fid, provider = captured["args"]
+    _dir, _path, _fid, provider, _key = captured["args"]
     assert provider is None
 
 
@@ -108,7 +109,7 @@ def test_analyze_hf_happy_path(client, monkeypatch):
     resp = client.post("/analyze-hf", data={"repo": "lukeslp/bluesky-alt-text"})
     assert resp.status_code == 302
     assert captured["kind"] == "analyze-hf"
-    _dir, repo, _fid, _provider = captured["args"]
+    _dir, repo, _fid, _provider, _key = captured["args"]
     assert repo == "lukeslp/bluesky-alt-text"
 
 
@@ -156,9 +157,10 @@ def test_backfill_happy_path(client, tmp_path, monkeypatch):
     resp = client.post("/backfill/demo")
     assert resp.status_code == 302
     assert captured["kind"] == "backfill"
-    _dir, finding_id, provider = captured["args"]
+    _dir, finding_id, provider, api_key = captured["args"]
     assert finding_id == "demo"
     assert provider == "anthropic"
+    assert api_key is None
 
 
 # ---------- job status -------------------------------------------------------
@@ -270,5 +272,5 @@ def test_analyze_upload_accepts_new_formats(client, monkeypatch, filename):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 302, f"{filename} should have been accepted"
-    _dir, upload_path, _fid, _provider = captured["args"]
+    _dir, upload_path, _fid, _provider, _key = captured["args"]
     assert upload_path.name == filename

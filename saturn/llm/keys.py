@@ -32,6 +32,10 @@ class MissingKeyError(RuntimeError):
 
 
 def _from_config_manager(provider: str) -> str | None:
+    # Public-viewer subprocesses set this to bypass the shared key store and
+    # only honor explicitly-supplied env vars. See viewer/runner.py.
+    if os.environ.get("SATURN_LLM_DISABLE_CONFIG_MANAGER") == "1":
+        return None
     try:
         from config import ConfigManager  # type: ignore
     except ImportError:

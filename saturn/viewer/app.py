@@ -88,6 +88,29 @@ def _unique_finding_id(findings_dir: Path, base: str) -> str:
     return candidate
 
 
+def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str | None, str | None]:
+    """Pick (provider_spec, api_key) for a request, honoring BYOK.
+
+    Order of precedence:
+    - If the form ticked `no_llm=1` (and allow_no_llm), return (None, None).
+    - If the form supplied an `api_key`, use it with the requested or default
+      provider. The server's keys are NOT consulted.
+    - Otherwise fall through to whatever provider+key resolution the runner
+      does (config manager, env vars). If no key is reachable the LLM pass
+      will fail open and the deterministic stats still write.
+
+    Returning (None, None) means "skip the LLM pass entirely."
+    """
+    if allow_no_llm and form.get("no_llm") == "1":
+        return None, None
+    provider = (form.get("llm") or app.config["SATURN_DEFAULT_LLM"] or "").strip() or None
+    api_key = (form.get("api_key") or "").strip() or None
+    if api_key and not provider:
+        # User pasted a key but no provider — assume the most-common case.
+        provider = "anthropic"
+    return provider, api_key
+
+
 def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
     app = Flask(
         __name__,
@@ -187,6 +210,22 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             abort(404)
         return load_findings(path).raw
 
+    @app.get("/view/<id>.ipynb")
+    def view_ipynb(id: str):
+        from flask import Response
+        from .ipynb import to_ipynb
+        import json as _json
+
+        path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
+        if path is None or not path.is_file():
+            abort(404)
+        doc = load_findings(path)
+        notebook = to_ipynb(doc)
+        body = _json.dumps(notebook, indent=1)
+        resp = Response(body, mimetype="application/x-ipynb+json")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{id}.ipynb"'
+        return resp
+
     @app.get("/health")
     def health():
         return {
@@ -220,10 +259,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         upload_path = upload_subdir / filename
         file.save(upload_path)
 
-        provider = request.form.get("llm") or app.config["SATURN_DEFAULT_LLM"] or None
-        if request.form.get("no_llm") == "1":
-            provider = None
-
+        provider, api_key = _resolve_llm_request(app, request.form)
         base = _slug(Path(filename).stem, "upload")
         finding_id = _unique_finding_id(app.config["SATURN_FINDINGS_DIR"], base)
 
@@ -234,6 +270,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             upload_path,
             finding_id,
             provider,
+            api_key,
         )
         return redirect(url_for("job_view", job_id=job.id))
 
@@ -244,10 +281,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             flash("Give a HuggingFace repo id (user/dataset).", "error")
             return redirect(url_for("index"))
 
-        provider = request.form.get("llm") or app.config["SATURN_DEFAULT_LLM"] or None
-        if request.form.get("no_llm") == "1":
-            provider = None
-
+        provider, api_key = _resolve_llm_request(app, request.form)
         base = _slug(repo.replace("/", "--"), "hf-finding")
         finding_id = _unique_finding_id(app.config["SATURN_FINDINGS_DIR"], base)
 
@@ -259,6 +293,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 repo,
                 finding_id,
                 provider,
+                api_key,
             )
         except ValueError as e:
             flash(str(e), "error")
@@ -270,13 +305,17 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
             abort(404)
-        provider = request.form.get("llm") or app.config["SATURN_DEFAULT_LLM"]
+        provider, api_key = _resolve_llm_request(app, request.form, allow_no_llm=False)
+        if not provider:
+            flash("Pick a provider (or supply an API key) to generate a summary.", "error")
+            return redirect(url_for("view", id=id))
         job = start_job(
             "backfill",
             backfill_insights,
             app.config["SATURN_FINDINGS_DIR"],
             id,
             provider,
+            api_key,
         )
         return redirect(url_for("job_view", job_id=job.id))
 

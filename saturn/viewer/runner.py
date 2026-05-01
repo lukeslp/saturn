@@ -105,14 +105,35 @@ def start_job(kind: str, target: Callable[..., None], *args: Any, **kwargs: Any)
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
 _HF_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
+# Provider env vars we strip from a subprocess's env when the caller did not
+# supply a BYOK key. Keeps the public viewer from silently using server keys.
+_PROVIDER_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+    "huggingface": "HF_TOKEN",
+}
+
 
 def backfill_insights(
     job_id: str,
     findings_dir: Path,
     finding_id: str,
     provider_spec: str,
+    api_key: str | None = None,
 ) -> None:
-    """Load an existing findings JSON, run the LLM pass, write it back."""
+    """Load an existing findings JSON, run the LLM pass, write it back.
+
+    If `api_key` is supplied, it overrides whatever shared.config or env vars
+    would have produced — this is the BYOK path. If None, fall back to the
+    server's configured keys (via load_api_keys) and surface MissingKeyError
+    as a job error rather than dying with an uncaught traceback.
+    """
     import json
 
     if not _SAFE_ID.match(finding_id):
@@ -133,7 +154,10 @@ def backfill_insights(
     payload = json.loads(path.read_text())
 
     spec = parse_provider_spec(provider_spec)
-    keys = load_api_keys([spec.provider])
+    if api_key:
+        keys = {spec.provider: api_key}
+    else:
+        keys = load_api_keys([spec.provider])  # raises MissingKeyError if absent
 
     if "a" in payload and "b" in payload:
         # compare findings: rehydrate CompareReport and run compare engine
@@ -188,12 +212,41 @@ _UPLOAD_EXTENSIONS = {
 }
 
 
+def _build_subprocess_env(provider_spec: str | None, api_key: str | None) -> dict:
+    """Construct the env for `saturn` subprocess so BYOK works correctly.
+
+    - If api_key is supplied AND a provider spec is set, inject only that key.
+    - If api_key is None: scrub all known provider keys from the env so a
+      public-viewer call cannot fall through to server-configured keys
+      silently. ConfigManager (~/documentation/API_KEYS.md) is also bypassed
+      by setting SATURN_LLM_DISABLE_CONFIG_MANAGER=1, which key resolution
+      respects.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"/home/coolhand/shared:{env.get('PYTHONPATH', '')}"
+
+    if api_key and provider_spec:
+        # Only set the one key the user supplied — wipe any others to avoid
+        # accidental cross-provider leaks.
+        for ev in _PROVIDER_KEY_ENV.values():
+            env.pop(ev, None)
+        provider = provider_spec.split(":", 1)[0]
+        env_var = _PROVIDER_KEY_ENV.get(provider, f"{provider.upper()}_API_KEY")
+        env[env_var] = api_key
+    elif provider_spec:
+        # No BYOK + provider was requested → scrub ConfigManager fallback so
+        # the public form can't silently use the server's docs/API_KEYS.md.
+        env["SATURN_LLM_DISABLE_CONFIG_MANAGER"] = "1"
+    return env
+
+
 def analyze_upload(
     job_id: str,
     findings_dir: Path,
     upload_path: Path,
     finding_id: str,
     provider_spec: str | None,
+    api_key: str | None = None,
 ) -> None:
     """Run saturn CLI against an uploaded file. Provider spec triggers --llm."""
     if not _SAFE_ID.match(finding_id):
@@ -214,11 +267,7 @@ def analyze_upload(
     if provider_spec:
         cmd += ["--llm", provider_spec]
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        f"/home/coolhand/shared:{env.get('PYTHONPATH', '')}"
-    )
-
+    env = _build_subprocess_env(provider_spec, api_key)
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"saturn analyze failed: {result.stderr[-500:]}")
@@ -232,6 +281,7 @@ def analyze_hf(
     repo: str,
     finding_id: str,
     provider_spec: str | None,
+    api_key: str | None = None,
 ) -> None:
     """Run saturn CLI against a HuggingFace repo."""
     if not _HF_REPO.match(repo):
@@ -252,11 +302,7 @@ def analyze_hf(
     if provider_spec:
         cmd += ["--llm", provider_spec]
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        f"/home/coolhand/shared:{env.get('PYTHONPATH', '')}"
-    )
-
+    env = _build_subprocess_env(provider_spec, api_key)
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"saturn huggingface failed: {result.stderr[-500:]}")

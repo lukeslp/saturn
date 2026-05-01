@@ -1,0 +1,17 @@
+{# Reusable BYOK form fields. Drop these inside any POST form that hits a
+   route which calls _resolve_llm_request(). The user can paste their own
+   provider key per request; the server's keys are never consulted on a
+   public-facing instance. #}
+{% macro byok_fields(prefix, default_provider="anthropic", compact=False) %}
+  <details class="field byok"{% if not compact %} open{% endif %}>
+    <summary>API key (used once, not stored)</summary>
+    <label for="{{ prefix }}-llm">Provider</label>
+    <select id="{{ prefix }}-llm" name="llm">
+      {% for p in ["anthropic", "openai", "groq", "gemini", "mistral", "cohere"] %}
+        <option value="{{ p }}"{% if p == default_provider %} selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <label for="{{ prefix }}-key">API key</label>
+    <input type="password" id="{{ prefix }}-key" name="api_key" autocomplete="off" placeholder="sk-…">
+  </details>
+{% endmacro %}
