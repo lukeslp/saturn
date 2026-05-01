@@ -260,6 +260,51 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
     def styleguide():
         return render_template("styleguide.html.j2")
 
+    @app.get("/batch")
+    def batch_status():
+        """Live progress for /tmp/saturn-batch.log (the bulk run)."""
+        log_path = Path(os.environ.get("SATURN_BATCH_LOG", "/tmp/saturn-batch.log"))
+        lines: list[str] = []
+        if log_path.is_file():
+            try:
+                lines = log_path.read_text().splitlines()
+            except OSError:
+                lines = []
+
+        total = ok = analyze_failed = stats_only = 0
+        recent: list[str] = []
+        last_done = None
+        for line in lines:
+            if "=== batch start:" in line:
+                m = re.search(r"(\d+) candidates", line)
+                if m:
+                    total = int(m.group(1))
+            elif "✓ done" in line:
+                ok += 1
+                last_done = line
+            elif "✓ stats only" in line:
+                ok += 1
+                stats_only += 1
+            elif "✗ analyze failed" in line:
+                analyze_failed += 1
+        # last 12 events for the live tail
+        for line in lines[-200:]:
+            if any(marker in line for marker in ("✓ done", "✓ stats only", "✗ analyze failed", "=== batch")):
+                recent.append(line)
+        recent = recent[-12:]
+        running = total > 0 and (ok + analyze_failed) < total
+
+        return render_template(
+            "batch.html.j2",
+            total=total,
+            done=ok,
+            analyze_failed=analyze_failed,
+            stats_only=stats_only,
+            recent=recent,
+            running=running,
+            log_path=str(log_path),
+        )
+
     @app.get("/health")
     def health():
         return {

@@ -386,16 +386,38 @@ class FileAdapter(SourceAdapter):
         if ext in {".db", ".sqlite", ".sqlite3"}:
             con = self._conn()
             con.execute("INSTALL sqlite; LOAD sqlite;")
+            # Idempotent attach: schema() and load_dataframe() both call
+            # _scan_sql(), and DuckDB rejects re-attaching a name that's
+            # already there. DETACH first to keep this side-effect-free.
+            con.execute("DETACH DATABASE IF EXISTS s;")
             con.execute(f"ATTACH '{self.path}' AS s (TYPE sqlite);")
             table = self.table
             if table is None:
-                rows = con.execute(
-                    "SELECT name FROM s.sqlite_master WHERE type='table' LIMIT 1"
-                ).fetchall()
-                if not rows:
+                # Newer DuckDB-SQLite extensions expose the catalog via
+                # information_schema, not via the legacy sqlite_master table.
+                # Skip sqlite_sequence (SQLite's autoincrement bookkeeping)
+                # and pick the table with the most rows so multi-table
+                # databases pick the substantive one, not whichever sorts first.
+                tables = [
+                    t for (t,) in con.execute(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_catalog = 's' AND table_name <> 'sqlite_sequence'"
+                    ).fetchall()
+                ]
+                if not tables:
                     raise ValueError(f"No tables in SQLite file {self.path}")
-                table = rows[0][0]
-            return f"SELECT * FROM s.{table}"
+                # Rank by row count; falls back to the first table if a count fails.
+                ranked: list[tuple[int, str]] = []
+                for t in tables:
+                    try:
+                        n = con.execute(f'SELECT COUNT(*) FROM s."{t}"').fetchone()[0]
+                    except Exception:
+                        n = 0
+                    ranked.append((n, t))
+                ranked.sort(key=lambda kv: (-kv[0], kv[1]))
+                table = ranked[0][1]
+            # Quote the identifier for tables with reserved-word or punctuated names
+            return f'SELECT * FROM s."{table}"'
         raise ValueError(f"Unsupported file type: {ext}")
 
     def _load_with_polars(self) -> "pl.DataFrame":

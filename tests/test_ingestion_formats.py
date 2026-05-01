@@ -139,3 +139,45 @@ def test_xlsx_end_to_end_profile(tmp_path):
     value_col = next(r for r in results if r.column == "value")
     assert value_col.kind == "numeric"
     assert value_col.stats["mean"] == pytest.approx(3.3, abs=0.01)
+
+
+# ---------- SQLite handling regressions -------------------------------------
+
+
+def test_sqlite_scan_sql_is_idempotent(tmp_path):
+    """`_scan_sql()` is called by both schema() and load_dataframe();
+    re-attaching `s` would crash. Verifying both succeed in sequence."""
+    import sqlite3
+
+    db = tmp_path / "demo.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("CREATE TABLE items (id INTEGER, name TEXT, qty INTEGER)")
+    conn.executemany("INSERT INTO items VALUES (?, ?, ?)",
+                     [(i, f"thing{i}", i * 3) for i in range(50)])
+    conn.commit()
+    conn.close()
+
+    adapter = FileAdapter(db)
+    schema = adapter.schema()
+    assert schema.columns
+    df = adapter.load_dataframe()
+    assert df.height == 50
+    assert "name" in df.columns
+
+
+def test_sqlite_picks_largest_table_when_multiple(tmp_path):
+    """Multi-table SQLite — the empty bookkeeping table mustn't win the picker."""
+    import sqlite3
+
+    db = tmp_path / "multi.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("CREATE TABLE empty_table (id INTEGER)")
+    conn.execute("CREATE TABLE big_table (id INTEGER, label TEXT)")
+    conn.executemany("INSERT INTO big_table VALUES (?, ?)",
+                     [(i, f"l{i}") for i in range(100)])
+    conn.commit()
+    conn.close()
+
+    df = FileAdapter(db).load_dataframe()
+    assert df.height == 100  # picked big_table, not empty_table
+    assert "label" in df.columns

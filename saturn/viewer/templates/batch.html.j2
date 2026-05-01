@@ -1,0 +1,68 @@
+{% extends "base.html.j2" %}
+{% block title %}saturn — batch progress{% endblock %}
+{% block head_extra %}
+  {% if running %}<meta http-equiv="refresh" content="20">{% endif %}
+{% endblock %}
+{% block main %}
+
+<section class="hero" style="grid-column: 1 / -1;">
+  <p class="eyebrow">batch run · {{ "live" if running else "complete" }}</p>
+  <h1>{% if running %}Saturn is profiling a corpus.{% else %}Batch finished.{% endif %}</h1>
+  <p class="lede">
+    Reading from <code style="font-family: var(--font-mono);">{{ log_path }}</code>.
+    Each row is one dataset profiled with deterministic stats and an Opus-curated reading.
+    Findings land in <code style="font-family: var(--font-mono);">~/saturn-findings/</code> and appear on the index when complete.
+  </p>
+</section>
+
+<section class="readings" style="grid-column: 1 / -1;">
+  <header>
+    <h2>Progress</h2>
+    <span class="count">{{ done }} / {{ total }} files</span>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: calc(var(--step) * 2); margin: calc(var(--step) * 3) 0;">
+    <div style="border: 1px solid var(--rule); padding: 1rem; border-radius: var(--radius);">
+      <div style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);">total</div>
+      <div style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; color: var(--ink); margin-top: 0.5rem;">{{ "{:,}".format(total) if total else "—" }}</div>
+    </div>
+    <div style="border: 1px solid var(--rule); padding: 1rem; border-radius: var(--radius);">
+      <div style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--good);">done</div>
+      <div style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; color: var(--good); margin-top: 0.5rem;">{{ "{:,}".format(done) }}</div>
+    </div>
+    <div style="border: 1px solid var(--rule); padding: 1rem; border-radius: var(--radius);">
+      <div style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--warn);">stats-only</div>
+      <div style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; color: var(--warn); margin-top: 0.5rem;">{{ stats_only }}</div>
+    </div>
+    <div style="border: 1px solid var(--rule); padding: 1rem; border-radius: var(--radius);">
+      <div style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--hot);">failed</div>
+      <div style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; color: var(--hot); margin-top: 0.5rem;">{{ analyze_failed }}</div>
+    </div>
+    {% if total %}
+    <div style="border: 1px solid var(--rule); padding: 1rem; border-radius: var(--radius);">
+      <div style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);">remaining</div>
+      <div style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; color: var(--ink); margin-top: 0.5rem;">{{ total - done - analyze_failed }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if total %}
+  <div role="progressbar"
+       aria-valuemin="0" aria-valuemax="{{ total }}" aria-valuenow="{{ done + analyze_failed }}"
+       aria-label="Batch progress"
+       style="width: 100%; height: 8px; background: var(--rule); border-radius: 1px; overflow: hidden; margin: calc(var(--step) * 2) 0;">
+    <div style="width: {{ ((done + analyze_failed) / total * 100) }}%; height: 100%; background: var(--hot); transition: width 200ms;"></div>
+  </div>
+  {% endif %}
+
+  <h3 style="font-family: var(--font-display); font-size: var(--size-h3); margin-top: calc(var(--step) * 4);">Recent activity</h3>
+  <pre style="background: var(--paper-raise); padding: calc(var(--step) * 2); border: 1px solid var(--rule); border-radius: var(--radius); font-family: var(--font-mono); font-size: var(--size-small); white-space: pre-wrap; line-height: 1.5; max-height: 380px; overflow: auto;">{% for line in recent %}{{ line }}
+{% endfor %}{% if not recent %}Waiting for the batch to start. Run /tmp/saturn-batch-run.sh to populate /tmp/saturn-batch.log.{% endif %}</pre>
+
+  <p class="muted" style="margin-top: calc(var(--step) * 3); font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em;">
+    {% if running %}This page refreshes every 20 seconds. {% endif %}
+    See finished readings on <a href="{{ url_for('index') }}">the index</a>.
+  </p>
+</section>
+
+{% endblock %}
