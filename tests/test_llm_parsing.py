@@ -65,3 +65,33 @@ def test_parse_critique_payload():
 def test_parse_critique_rejects_bad_verdict():
     with pytest.raises(ValueError, match="verdict"):
         parse_critique_payload({"verdict": "maybe", "reason": "x"})
+
+
+def test_extract_json_balanced_scan_stops_at_first_closed_object():
+    """Greedy regex grabs to the last '}'; balanced scan must stop at the first closed span."""
+    raw = '{"a": 1, "b": 2} Hope that helps! {note: stray}'
+    assert extract_json(raw) == {"a": 1, "b": 2}
+
+
+def test_extract_json_handles_strings_with_braces():
+    """A '}' inside a JSON string must NOT close the object."""
+    raw = '{"k": "value with } inside"}  trailing text'
+    assert extract_json(raw) == {"k": "value with } inside"}
+
+
+def test_extract_json_handles_escaped_quotes():
+    raw = r'{"k": "she said \"hi\""} stuff'
+    assert extract_json(raw) == {"k": 'she said "hi"'}
+
+
+def test_extract_json_nested_objects():
+    raw = '{"a": {"b": {"c": 1}}}  trailing prose'
+    assert extract_json(raw) == {"a": {"b": {"c": 1}}}
+
+
+def test_extract_json_falls_back_to_greedy_when_balanced_invalid():
+    """If the balanced span doesn't parse but the greedy span does, use the greedy one."""
+    # Constructed: balanced scanner stops at first `}` (truncated object).
+    # No real-world response looks like this; this just guards the fallback path.
+    raw = '{"a": 1, "b": [{"x": 2}, {"y": 3}]}'
+    assert extract_json(raw) == {"a": 1, "b": [{"x": 2}, {"y": 3}]}

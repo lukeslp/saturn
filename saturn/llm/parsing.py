@@ -13,6 +13,42 @@ from typing import Any
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 _OBJ = re.compile(r"\{.*\}", re.DOTALL)
 
+
+def _scan_balanced_object(text: str) -> str | None:
+    """Find the first balanced `{...}` span in `text`, respecting strings.
+
+    The greedy regex `\\{.*\\}` matches from the first `{` to the last `}` in
+    the input, which over-captures when models append prose after their JSON
+    (`{"a": 1} Hope that helps! {note: ...}`). This walks character by
+    character, tracking quote state and brace depth, and returns the first
+    closed object — a much safer slice for `json.loads`.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
 _VALID_CONFIDENCE = {"high", "medium", "low"}
 _VALID_VERDICT = {"agree", "disagree", "partial"}
 _VALID_ROLES = {
@@ -23,14 +59,30 @@ _VALID_CHART_KINDS = {"histogram", "bar", "donut", "length"}
 
 
 def extract_json(raw: str) -> dict[str, Any]:
+    """Extract a JSON object from a model response.
+
+    Tries (in order):
+    1. The contents of a fenced ```json``` block, parsed via balanced scan
+    2. A balanced `{...}` span in the raw text (handles trailing prose)
+    3. The greedy `\\{.*\\}` slice as a final fallback (back-compat)
+    """
     raw = raw.strip()
     fence = _FENCE.search(raw)
-    if fence:
-        raw = fence.group(1).strip()
-    obj_match = _OBJ.search(raw)
-    if not obj_match:
-        raise ValueError("no JSON object found in response")
-    return json.loads(obj_match.group(0))
+    body = fence.group(1).strip() if fence else raw
+
+    # Preferred: balanced-brace scan that ignores quoted strings
+    scanned = _scan_balanced_object(body)
+    if scanned is not None:
+        try:
+            return json.loads(scanned)
+        except json.JSONDecodeError:
+            pass  # fall through to the greedy fallback
+
+    # Fallback: original greedy regex (catches obscure cases the scanner missed)
+    obj_match = _OBJ.search(body)
+    if obj_match:
+        return json.loads(obj_match.group(0))
+    raise ValueError("no JSON object found in response")
 
 
 def parse_insight_payload(payload: dict[str, Any]) -> dict[str, Any]:
