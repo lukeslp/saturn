@@ -1670,3 +1670,97 @@ a:focus-visible {
   color: var(--paper);
 }
 .collection-chip.active .muted { color: var(--paper); opacity: 0.7; }
+
+/* Per-finding annotations (sidecar notes.md) */
+.notes-card {
+  grid-column: 1 / -1;
+  margin-bottom: calc(var(--step) * 5);
+  padding: calc(var(--step) * 3);
+  background: linear-gradient(180deg, var(--paper-raise) 0%, var(--paper) 100%);
+  border-left: 3px solid var(--cool);
+  border-radius: var(--radius);
+}
+.notes-card .notes-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--step) * 2);
+  flex-wrap: wrap;
+  margin-bottom: calc(var(--step) * 1.5);
+  padding-bottom: calc(var(--step) * 1);
+  border-bottom: 1px solid var(--rule);
+}
+.notes-card h2 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "wght" 600, "SOFT" 30;
+  font-size: var(--size-h3);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.notes-card .muted code {
+  font-size: 0.85em;
+  background: var(--paper);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+.notes-body {
+  font-size: var(--size-body);
+  line-height: 1.6;
+  max-width: var(--measure);
+}
+.notes-body > * { margin: 0 0 calc(var(--step) * 1.25) 0; }
+.notes-body > *:last-child { margin-bottom: 0; }
+.notes-body h1, .notes-body h2, .notes-body h3, .notes-body h4 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "wght" 600, "SOFT" 30;
+  letter-spacing: -0.01em;
+  margin-top: calc(var(--step) * 2);
+}
+.notes-body h1 { font-size: var(--size-h2); }
+.notes-body h2 { font-size: var(--size-h3); }
+.notes-body h3 { font-size: var(--size-lede); }
+.notes-body code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--paper-raise);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.notes-body pre {
+  background: var(--paper-raise);
+  border: 1px solid var(--rule);
+  padding: calc(var(--step) * 1.5);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+.notes-body pre code { background: transparent; padding: 0; }
+.notes-body blockquote {
+  border-left: 2px solid var(--rule-strong);
+  padding-left: calc(var(--step) * 1.5);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.notes-body table {
+  border-collapse: collapse;
+  font-size: var(--size-small);
+  font-family: var(--font-mono);
+}
+.notes-body table th, .notes-body table td {
+  border-bottom: 1px solid var(--rule);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+/* Notebook view: notes cell uses a cool-blue gutter and a soft background */
+.cell-notes .gutter {
+  color: var(--cool);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.6rem;
+}
+.cell-notes .cell-body {
+  border-left-color: var(--cool);
+  background: var(--paper-raise);
+  padding: calc(var(--step) * 2) calc(var(--step) * 2.5);
+}

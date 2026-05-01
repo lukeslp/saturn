@@ -24,6 +24,16 @@
   </div>
 </header>
 
+{% if notes_html %}
+<section class="notes-card" aria-labelledby="notes-heading">
+  <div class="notes-meta">
+    <h2 id="notes-heading">Notes</h2>
+    <span class="muted">edit <code>{{ doc.id }}.notes.md</code> beside the findings JSON</span>
+  </div>
+  <div class="notes-body">{{ notes_html | safe }}</div>
+</section>
+{% endif %}
+
 <section class="narrative">
   <h2>Reading</h2>
   {% if compare_global %}

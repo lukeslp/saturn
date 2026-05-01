@@ -159,6 +159,10 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         if view_mode not in {"report", "notebook"}:
             view_mode = "report"
 
+        # Per-finding annotations (sidecar <id>.notes.md if present)
+        from .notes import notes_path_for, render_notes
+        notes_html = render_notes(notes_path_for(app.config["SATURN_FINDINGS_DIR"], id))
+
         charts, overview_chart = {}, None
         chart_tables: dict[str, Any] = {}
         overview_table = None
@@ -210,6 +214,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                     chart_tables=chart_tables,
                     overview_chart=None,
                     overview_table=None,
+                    notes_html=notes_html,
                 )
             overview_chart = dataset_overview_chart(
                 [(r.column, r.null_rate) for r in report.results]
@@ -252,6 +257,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             chart_tables=chart_tables,
             overview_chart=overview_chart,
             overview_table=overview_table,
+            notes_html=notes_html,
         )
 
     @app.get("/api/findings/<id>")

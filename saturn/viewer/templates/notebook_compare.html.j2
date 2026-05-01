@@ -27,6 +27,16 @@
     </div>
   </header>
 
+  {% if notes_html %}
+  <article class="cell cell-md cell-notes">
+    <div class="gutter">notes</div>
+    <div class="cell-body">
+      <p class="muted" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 0.75rem 0;">edit <code>{{ doc.id }}.notes.md</code></p>
+      <div class="notes-body">{{ notes_html | safe }}</div>
+    </div>
+  </article>
+  {% endif %}
+
   {# ---- overview cell ---- #}
   {% set ns.cell = ns.cell + 1 %}
   <article class="cell cell-md">
