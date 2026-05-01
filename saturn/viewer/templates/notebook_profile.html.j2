@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_macros.html.j2" import byok_fields, chart_fallback %}
+{% from "_macros.html.j2" import byok_fields, chart_fallback, insight_error_hint %}
 {% block title %}{{ doc.id }} — saturn notebook{% endblock %}
 {% block head_extra %}
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
@@ -107,6 +107,7 @@ subprocess.run([
       <div class="gutter"></div>
       <div class="cell-body">
         <div class="missing">
+          {{ insight_error_hint(insights) }}
           <p>No plain-language summary on this reading yet.</p>
           <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
             {{ byok_fields("nb-profile-bf", default_provider=default_llm) }}

@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_macros.html.j2" import byok_fields %}
+{% from "_macros.html.j2" import byok_fields, insight_error_hint %}
 {% block title %}{{ doc.a_label }} vs {{ doc.b_label }} — saturn notebook{% endblock %}
 {% block head_extra %}
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
@@ -96,6 +96,7 @@ subprocess.run([
       <div class="gutter"></div>
       <div class="cell-body">
         <div class="missing">
+          {{ insight_error_hint(insights) }}
           <p>No plain-language summary on this compare yet.</p>
           <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
             {{ byok_fields("nb-compare-bf", default_provider=default_llm) }}

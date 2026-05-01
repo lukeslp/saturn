@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_macros.html.j2" import byok_fields %}
+{% from "_macros.html.j2" import byok_fields, insight_error_hint %}
 {% block title %}{{ doc.a_label }} vs {{ doc.b_label }} — saturn{% endblock %}
 {% block main %}
 
@@ -59,6 +59,7 @@
     </div>
   {% else %}
     <div class="missing">
+      {{ insight_error_hint(insights) }}
       <p>No plain-language summary on this compare yet. The insight pass walks the most-divergent columns and writes up what changed between the two slices.</p>
       <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
         {{ byok_fields("compare-bf", default_provider=default_llm) }}
