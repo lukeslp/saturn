@@ -34,6 +34,7 @@
       }
       if (state.kind === 'all') return true;
       if (state.kind === 'reading') return a.dataset.hasInsight === '1';
+      if (state.kind === 'notes') return a.dataset.hasNotes === '1';
       return a.dataset.kind === state.kind;
     });
   };
