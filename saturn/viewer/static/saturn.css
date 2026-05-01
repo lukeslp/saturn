@@ -1481,3 +1481,27 @@ a:focus-visible {
   border-top: 1px solid var(--rule);
 }
 .readings-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Index card role mix */
+.role-mix {
+  margin: calc(var(--step) * 1.25) 0 calc(var(--step) * 1) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.role-mix .chip {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+  text-transform: lowercase;
+  font-weight: 400;
+}
+.role-mix .chip-role {
+  border-color: var(--cool-wash);
+  color: var(--cool);
+}

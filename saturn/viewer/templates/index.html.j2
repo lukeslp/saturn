@@ -101,6 +101,13 @@
     {% for d in docs %}
       {% set has_insights = d.raw.get('insights') and d.raw['insights'].get('insights') %}
       {% set first_insight = has_insights and d.raw['insights']['insights'][0] or None %}
+      {% set role_mix = {} %}
+      {% if has_insights %}
+        {% for ins in d.raw['insights']['insights'] if ins.get('role') %}
+          {% if role_mix.update({ins.role: role_mix.get(ins.role, 0) + 1}) %}{% endif %}
+        {% endfor %}
+      {% endif %}
+      {% set col_count = (d.columns | length) if d.kind.value == 'profile' else (d.raw.columns | length) %}
       <article class="reading"
                data-name="{{ d.id }}"
                data-kind="{{ d.kind.value }}"
@@ -117,11 +124,18 @@
           <h3><a href="{{ url_for('view', id=d.id) }}">{{ d.id.replace('-', ' ').replace('_', ' ') }}</a></h3>
           <p class="source">
             {% if d.kind.value == 'profile' %}
-              {{ d.meta.source }} · {{ "{:,}".format(d.meta.row_count or 0) }} rows
+              {{ d.meta.source }} · <strong>{{ "{:,}".format(d.meta.row_count or 0) }}</strong> rows × <strong>{{ col_count }}</strong> cols
             {% else %}
-              {{ d.a_label }} ({{ "{:,}".format(d.raw.a.row_count or 0) }}) vs {{ d.b_label }} ({{ "{:,}".format(d.raw.b.row_count or 0) }})
+              {{ d.a_label }} ({{ "{:,}".format(d.raw.a.row_count or 0) }}) vs {{ d.b_label }} ({{ "{:,}".format(d.raw.b.row_count or 0) }}) · <strong>{{ col_count }}</strong> cols
             {% endif %}
           </p>
+          {% if role_mix %}
+            <p class="role-mix">
+              {% for role, n in (role_mix.items() | list | sort(attribute=1, reverse=true)) %}
+                <span class="chip chip-role">{{ n }}× {{ role }}</span>
+              {% endfor %}
+            </p>
+          {% endif %}
           {% if first_insight %}
             <p class="preview">{{ first_insight.narrative }}</p>
           {% else %}
