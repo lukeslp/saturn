@@ -2,6 +2,49 @@
 
 All notable changes to saturn are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project tracks [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Per-finding annotations.** Drop a `<id>.notes.md` sidecar next to the findings JSON and the viewer renders it inline above the LLM reading on both the report view (as `.notes-card`) and the notebook view (as a `.cell-notes` cell). Markdown goes through `markdown` + `bleach` with a research-tuned allowlist (tables, fenced code, footnotes, links). Script, style, iframe, inline handlers, and `javascript:` URLs are stripped. Bare URLs auto-linkify with `rel="nofollow noopener"`. Index gains a `notes` stamp + "with notes" filter. Tests: 19 covering missing/empty/corrupt files, XSS payloads, end-to-end render.
+- **Insight error hint.** When a previous LLM pass failed, the missing-summary form surfaces a redacted plain-language hint above the "Generate summary" button. Recognises four common patterns: credit balance exhausted, 429 rate limit, auth/invalid key, timeout. Anything else falls through to a generic "previous attempt failed (TYPE)". The raw provider error message stays on disk for debugging but never reaches the rendered HTML. Tests: 10 covering each error type + raw-message redaction.
+- **Notebook view (`?view=notebook`).** Cell gutters (`[n]:` / `Out[n]:` / `Fig n.`), inline Plotly figures, reproducibility footer. Toggle between report and notebook on every finding page.
+- **`.ipynb` export.** `/view/<id>.ipynb` returns valid nbformat 5.x with markdown + matplotlib code cells, one plot cell per column. Cell IDs match nbformat 5.x compat requirements.
+- **Citation block.** BibTeX + APA on every finding page, click-to-copy via the `data-copy` attribute.
+- **Style guide.** `/styleguide` documents the datasheet-annual aesthetic (Fraunces serif + IBM Plex Mono, warm bone paper, signal red accent), with copy-pasteable markup for chips, alerts, stamps, summary cards, drop zones, notebook cells, footers, and the notes sidecar.
+- **Searchable + paginated index** for 200+ findings: live filter on slug + source, kind/reading/notes radios, `/`-key focus shortcut, 50-per-page pagination, `data-has-insight` + `data-has-notes` attributes.
+- **Collections rail** auto-derived from slug prefix on the index (chips appear when ≥3 findings share a prefix).
+- **Multi-sheet workbooks.** `--sheet NAME_OR_INDEX` for XLSX/XLS/XLSB/ODS. `list_sheets()` introspects available sheet names. Saturn warns when a workbook has multiple sheets and a specific one wasn't picked.
+- **A11y data-table fallback.** Every Plotly figure has a `<details>Show data table</details>` companion with a screen-reader-friendly `<table>`. Covers numeric histograms, categorical top-values (with shares), text length histograms, top-words, language counts (engine keys stripped), correlation matrices (capped at 12×12), and per-column null rates.
+- **LLM-curated columns (prompt v2).** Per-column `role` (`identifier` / `feature` / `free_text` / `quasi_identifier` / `noise`) and `treatment` (one-line guidance: "drop", "encode", "tokenize as text", etc.). Dataset-level `featured_charts` lets the model pick 3–5 columns with custom captions for a featured rail above per-column sections. Prompt schema bumped from `saturn-insight-v1` to `saturn-insight-v2`.
+- **BYOK on public viewer.** Per-request API key field on `/analyze` and `/analyze-hf`. Anonymous uploads default to stats-only when no key is provided. Server keys are scrubbed from the subprocess env when no BYOK is supplied. The provider dropdown now lists anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, and ollama. Picking ollama with no key threads a `"local"` sentinel through the resolver, runner, and key loader so saturn talks to `http://localhost:11434` keyless. Setting `OLLAMA_API_KEY=local` is explicitly avoided since unauthenticated localhost ollama rejects a literal `Bearer local` header.
+- **Demo mode.** Server defaults to `anthropic:claude-opus-4-7` and forms ship with the LLM pass enabled. BYOK is now an optional override rather than the only path.
+- **`/batch` progress page** for live monitoring of bulk runs.
+- **Spreadsheet, TSV, Feather/Arrow ingestion** via the polars direct path.
+- 89 new tests since 0.2.0. Total now 290 passing.
+
+### Changed
+- README peer-comparison table (saturn vs. ydata-profiling vs. sweetviz vs. dataprep) and live-demo link at the top.
+- Index card surfaces column count and the LLM-tagged role mix as chips.
+
+### Fixed
+- `extract_json` does a balanced-brace scan so Opus's habit of writing prose after the JSON object stops breaking insight pass.
+- `pyjson5` fallback handles malformed Opus output (single quotes, trailing commas, unquoted keys).
+- SQLite ingestion: `DETACH DATABASE IF EXISTS s` before `ATTACH` so re-loads don't fail. Empty-table picker prefers row-count-largest, skipping `sqlite_sequence`. Switched from `sqlite_master` (DuckDB-specific quirk) to `information_schema.tables WHERE table_catalog = 's'`.
+- `request.url_root` no longer doubles the prefix on cite URLs (use `url_for(... _external=True)` instead).
+- Caddy `/saturn` (no trailing slash) used to hit the static archive; added `redir /saturn /saturn/ 308` and removed the legacy archive at `~/html/saturn`.
+- `nbformat 5.x` MissingIDFieldWarning: every cell now has a unique `id`.
+- LLM gateway: serialise concurrent provider calls via a semaphore, exponential backoff on 429s, single gunicorn worker on the deployed viewer.
+- Strip dead `hotspots` field from prompt evidence (was redundant with the role mix surfaced in v2).
+- `X-Forwarded-Prefix` is honored only when `SATURN_TRUST_FORWARDED_PREFIX=1`, so `url_for` prepends `/saturn` correctly behind Caddy without trusting arbitrary upstreams.
+- Latent typecheck error: `viewer/app.py` referenced `Any` without importing it (worked at runtime because Python doesn't evaluate local variable annotations).
+
+### Internal
+- Eight elegance refactors applied across profilers/cli/compare/ingestion/report: `_emit_outputs` helper, `_emit_common_alerts` registry, `_DIVERGENCE_TERMS` table, `_ensure_frame` helper, `_delta_rows` kind dispatch, single `_run` with `sample_size` switch, `_numeric_stats` shared between polars + dict paths.
+- `BYOK` form fields unified via the `byok_fields` macro; both inline forms on the index now use it.
+- `insight_error_hint` macro moved into `_macros.html.j2` so it renders identically across report and notebook views.
+- `chart_fallback` helpers in `viewer/chart_fallback.py`: `column_data_table`, `overview_data_table`, `language_data_table`, `correlation_data_table`.
+- `notes.py` for sidecar markdown rendering. `loader.py` propagates `has_notes` so the index can filter without re-reading every file.
+
 ## [0.2.0] - 2026-04-22
 
 ### Added
