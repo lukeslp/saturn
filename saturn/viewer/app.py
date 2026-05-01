@@ -293,6 +293,25 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         resp.headers["Content-Disposition"] = f'attachment; filename="{id}.ipynb"'
         return resp
 
+    @app.get("/view/<id>.html")
+    def view_static_html(id: str):
+        """Self-contained static HTML report written by `saturn analyze`.
+
+        No external JS/CSS, all charts inlined. Suitable for sharing or
+        embedding without a server. Falls back to 404 if the static file
+        wasn't generated alongside the JSON.
+        """
+        from flask import send_file
+
+        json_path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
+        if json_path is None or not json_path.is_file():
+            abort(404)
+        html_path = json_path.with_suffix(".html")
+        if not html_path.is_file():
+            abort(404)
+        return send_file(html_path, mimetype="text/html",
+                         as_attachment=False, download_name=f"{id}.html")
+
     @app.get("/styleguide")
     def styleguide():
         return render_template("styleguide.html.j2")

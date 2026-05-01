@@ -48,7 +48,7 @@
     if (matches.length === 0) {
       empty.hidden = false;
       pager.hidden = true;
-      countEl.textContent = '000 files (0 visible)';
+      countEl.textContent = `${String(total).padStart(3, '0')} files (0 visible)`;
       return;
     }
     empty.hidden = true;

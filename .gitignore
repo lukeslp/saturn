@@ -41,3 +41,4 @@ saturn_findings.json
 data/
 !tests/fixtures/
 .claude/
+.playwright-mcp/

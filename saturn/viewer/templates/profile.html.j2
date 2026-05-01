@@ -1,5 +1,8 @@
 {% extends "base.html.j2" %}
 {% from "_macros.html.j2" import byok_fields, chart_fallback, insight_error_hint %}
+{% block head_extra %}
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+{% endblock %}
 {% block title %}{{ doc.id }} · saturn{% endblock %}
 {% block main %}
 
@@ -19,6 +22,7 @@
     <span><strong>{{ doc.columns | length }}</strong>&nbsp;columns</span>
     <span>profiled&nbsp;<strong>{{ doc.meta.generated_at[:10] }}</strong></span>
     <span><a href="{{ url_for('api_findings', id=doc.id) }}">raw JSON</a></span>
+    <span><a href="{{ url_for('view_static_html', id=doc.id) }}" download>static .html</a></span>
     <span><a href="{{ url_for('view_ipynb', id=doc.id) }}" download>.ipynb</a></span>
     <span class="nb-view-toggle" style="margin-left: auto;">
       <span aria-current="page">Report</span>
