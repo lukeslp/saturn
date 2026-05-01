@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_macros.html.j2" import byok_fields %}
+{% from "_macros.html.j2" import byok_fields, chart_fallback %}
 {% block title %}{{ doc.id }} — saturn notebook{% endblock %}
 {% block head_extra %}
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
@@ -159,6 +159,7 @@ subprocess.run([
               {{ charts[fc.column] | safe }}
               <figcaption><strong>{{ fc.column }}</strong> &middot; {{ fc.caption or 'featured by the summary' }}</figcaption>
             </figure>
+            {{ chart_fallback(chart_tables.get(fc.column)) }}
           </div>
         </article>
       {% endif %}
@@ -176,6 +177,7 @@ subprocess.run([
           {{ overview_chart | safe }}
           <figcaption>Per-column null rate across the corpus. Columns are ordered by input position.</figcaption>
         </figure>
+        {{ chart_fallback(overview_table) }}
       </div>
     </article>
   {% endif %}
@@ -191,6 +193,7 @@ subprocess.run([
           {{ charts['__languages__'] | safe }}
           <figcaption>Language mix across all text columns (per-string detection, sampled).</figcaption>
         </figure>
+        {{ chart_fallback(chart_tables.get('__languages__')) }}
       </div>
     </article>
   {% endif %}
@@ -206,6 +209,7 @@ subprocess.run([
           {{ charts['__correlation__'] | safe }}
           <figcaption>Pearson correlation across numeric columns (sampled, bounded).</figcaption>
         </figure>
+        {{ chart_fallback(chart_tables.get('__correlation__')) }}
       </div>
     </article>
   {% endif %}
@@ -278,6 +282,7 @@ subprocess.run([
               {% else %}Chart for <code>{{ c.column }}</code>.{% endif %}
             </figcaption>
           </figure>
+          {{ chart_fallback(chart_tables.get(c.column)) }}
         </div>
       </article>
     {% endif %}

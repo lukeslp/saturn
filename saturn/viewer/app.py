@@ -160,6 +160,8 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             view_mode = "report"
 
         charts, overview_chart = {}, None
+        chart_tables: dict[str, Any] = {}
+        overview_table = None
         # Notebook view always builds the full chart set; report view only
         # builds the columns the model picked as featured (cheap render).
         needs_charts = view_mode == "notebook" or _featured_columns(doc)
@@ -171,6 +173,12 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 language_chart,
             )
             from ..report import ReportData
+            from .chart_fallback import (
+                column_data_table,
+                correlation_data_table,
+                language_data_table,
+                overview_data_table,
+            )
 
             report = ReportData.from_findings(doc.raw)
             wanted = (
@@ -178,6 +186,9 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 if view_mode == "notebook"
                 else set(_featured_columns(doc))
             )
+            # Map column name -> its raw findings dict so the fallback builder
+            # can read extras directly (we already have them on disk).
+            raw_columns_by_name = {c.get("column"): c for c in (doc.raw.get("columns") or [])}
             for result in report.results:
                 if result.column not in wanted:
                     continue
@@ -185,6 +196,9 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                     charts[result.column] = chart_for(result)
                 except Exception:
                     charts[result.column] = None
+                raw_col = raw_columns_by_name.get(result.column)
+                if raw_col is not None:
+                    chart_tables[result.column] = column_data_table(raw_col)
             if view_mode != "notebook":
                 # report view doesn't render the dataset-level charts inline
                 return render_template(
@@ -193,13 +207,17 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                     default_llm=app.config["SATURN_DEFAULT_LLM"],
                     view_mode=view_mode,
                     charts=charts,
+                    chart_tables=chart_tables,
                     overview_chart=None,
+                    overview_table=None,
                 )
             overview_chart = dataset_overview_chart(
                 [(r.column, r.null_rate) for r in report.results]
             )
+            overview_table = overview_data_table(doc.raw.get("columns") or [])
             lang_counts = doc.raw.get("language_counts", {})
             charts["__languages__"] = language_chart(lang_counts) if lang_counts else None
+            chart_tables["__languages__"] = language_data_table(lang_counts) if lang_counts else None
             # Correlation across numeric columns
             import numpy as np
             numeric = [r for r in report.results
@@ -211,11 +229,12 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                         [np.asarray(r.extras["sample"][:max_len]) for r in numeric]
                     )
                     corr = np.corrcoef(mat)
-                    charts["__correlation__"] = correlation_heatmap(
-                        corr.tolist(), [r.column for r in numeric]
-                    )
+                    labels = [r.column for r in numeric]
+                    charts["__correlation__"] = correlation_heatmap(corr.tolist(), labels)
+                    chart_tables["__correlation__"] = correlation_data_table(corr.tolist(), labels)
                 except Exception:
                     charts["__correlation__"] = None
+                    chart_tables["__correlation__"] = None
 
         template_name = {
             ("report", "profile"): "profile.html.j2",
@@ -230,7 +249,9 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             default_llm=app.config["SATURN_DEFAULT_LLM"],
             view_mode=view_mode,
             charts=charts,
+            chart_tables=chart_tables,
             overview_chart=overview_chart,
+            overview_table=overview_table,
         )
 
     @app.get("/api/findings/<id>")

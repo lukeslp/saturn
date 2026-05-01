@@ -1,3 +1,24 @@
+{# Render a chart-fallback table inside a <details> block so screen-reader
+   users get the same numbers as a sighted Plotly viewer. The macro is a
+   no-op when `data` is None — every figure that can produce one will. #}
+{% macro chart_fallback(data) %}
+  {% if data %}
+  <details class="chart-fallback">
+    <summary>Show data table</summary>
+    <table>
+      <caption class="visually-hidden">{{ data.caption }}</caption>
+      <thead><tr>{% for h in data.headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in data.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+{% endmacro %}
+
+
 {# Reusable BYOK form fields. Drop these inside any POST form that hits a
    route which calls _resolve_llm_request(). The user can paste their own
    provider key per request; the server's keys are never consulted on a

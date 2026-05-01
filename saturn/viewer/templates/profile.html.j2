@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_macros.html.j2" import byok_fields %}
+{% from "_macros.html.j2" import byok_fields, chart_fallback %}
 {% block title %}{{ doc.id }} — saturn{% endblock %}
 {% block main %}
 
@@ -72,6 +72,7 @@
               <strong>{{ fc.column }}</strong>
               {% if fc.caption %} &middot; {{ fc.caption }}{% endif %}
             </figcaption>
+            {{ chart_fallback(chart_tables.get(fc.column)) }}
           </figure>
         {% endif %}
       {% endfor %}

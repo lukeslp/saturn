@@ -1572,3 +1572,51 @@ a:focus-visible {
   animation: fadeOut 1.2s ease-out forwards;
 }
 @keyframes fadeOut { from { opacity: 1; } 60% { opacity: 1; } to { opacity: 0; } }
+
+/* Chart fallback (a11y data tables) */
+.chart-fallback {
+  margin-top: calc(var(--step) * 1.25);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.chart-fallback summary {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  padding: calc(var(--step) * 1) calc(var(--step) * 1.5);
+  list-style: none;
+}
+.chart-fallback summary::-webkit-details-marker { display: none; }
+.chart-fallback summary::before { content: "+ "; color: var(--hot); }
+.chart-fallback[open] summary::before { content: "− "; }
+.chart-fallback summary:hover { color: var(--hot); }
+.chart-fallback table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums lining-nums;
+  border-top: 1px solid var(--rule);
+}
+.chart-fallback th,
+.chart-fallback td {
+  text-align: left;
+  padding: calc(var(--step) * 0.75) calc(var(--step) * 1.25);
+  border-bottom: 1px solid var(--rule);
+}
+.chart-fallback th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--paper-raise);
+  position: sticky;
+  top: 0;
+}
+.chart-fallback td:nth-child(n+2) { text-align: right; }
+.chart-fallback table { display: block; max-height: 320px; overflow-y: auto; }
