@@ -54,6 +54,12 @@ def load_api_keys(providers: list[str]) -> dict[str, str]:
         if not key:
             env_name = _ENV_VAR.get(p, f"{p.upper()}_API_KEY")
             key = os.environ.get(env_name) or None
+        # Ollama is special-cased: the provider class accepts api_key="local"
+        # as a sentinel meaning "fall back to OLLAMA_HOST or default
+        # localhost:11434". So keyless ollama is a valid configuration, not
+        # a missing-key error.
+        if not key and p == "ollama":
+            key = "local"
         if not key:
             expected = _ENV_VAR.get(p, f"{p.upper()}_API_KEY")
             raise MissingKeyError(

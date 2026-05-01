@@ -80,6 +80,92 @@ def test_resolve_backfill_disallows_no_llm_pass(app):
     assert key == "sk-x"
 
 
+def test_resolve_ollama_keyless_uses_local_sentinel(app):
+    """Ollama with empty key gets the 'local' sentinel so the gateway
+    doesn't raise MissingKeyError; the provider class falls through to
+    its OLLAMA_HOST default."""
+    from saturn.viewer.app import _resolve_llm_request
+
+    form = {"llm": "ollama"}
+    provider, key = _resolve_llm_request(app, form)
+    assert provider == "ollama"
+    assert key == "local"
+
+
+def test_resolve_ollama_with_explicit_bearer_passes_through(app):
+    from saturn.viewer.app import _resolve_llm_request
+
+    form = {"llm": "ollama", "api_key": "real-bearer-token"}
+    provider, key = _resolve_llm_request(app, form)
+    assert provider == "ollama"
+    assert key == "real-bearer-token"
+
+
+def test_resolve_ollama_with_model_spec_keyless(app):
+    """`ollama:llama3.2` should still get the local sentinel."""
+    from saturn.viewer.app import _resolve_llm_request
+
+    form = {"llm": "ollama:llama3.2"}
+    provider, key = _resolve_llm_request(app, form)
+    assert provider == "ollama:llama3.2"
+    assert key == "local"
+
+
+# ---------- subprocess env construction --------------------------------------
+
+
+def test_build_subprocess_env_skips_ollama_local_sentinel():
+    """OLLAMA_API_KEY=local would make the provider send a literal
+    'Bearer local' header — which an unauthenticated localhost ollama
+    rejects. We avoid setting it."""
+    from saturn.viewer.runner import _build_subprocess_env
+
+    env = _build_subprocess_env("ollama", "local")
+    assert env.get("OLLAMA_API_KEY") is None
+
+
+def test_build_subprocess_env_sets_ollama_bearer_for_real_token():
+    """A non-'local' value is treated as a Bearer token for hosted ollama."""
+    from saturn.viewer.runner import _build_subprocess_env
+
+    env = _build_subprocess_env("ollama", "real-token-xyz")
+    assert env.get("OLLAMA_API_KEY") == "real-token-xyz"
+
+
+def test_load_api_keys_ollama_keyless_returns_local_sentinel(monkeypatch):
+    """`load_api_keys(['ollama'])` with no env at all should NOT raise —
+    ollama is special-cased to default to the 'local' sentinel."""
+    from saturn.llm.keys import load_api_keys
+
+    # Scrub any existing OLLAMA_HOST so this is a true keyless test
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    # Bypass ConfigManager too
+    monkeypatch.setenv("SATURN_LLM_DISABLE_CONFIG_MANAGER", "1")
+
+    keys = load_api_keys(["ollama"])
+    assert keys == {"ollama": "local"}
+
+
+def test_load_api_keys_ollama_honors_explicit_host(monkeypatch):
+    from saturn.llm.keys import load_api_keys
+
+    monkeypatch.setenv("OLLAMA_HOST", "http://my-ollama:11434")
+    monkeypatch.setenv("SATURN_LLM_DISABLE_CONFIG_MANAGER", "1")
+    keys = load_api_keys(["ollama"])
+    assert keys == {"ollama": "http://my-ollama:11434"}
+
+
+def test_load_api_keys_other_providers_still_raise_when_missing(monkeypatch):
+    """The ollama keyless special case must NOT leak to other providers."""
+    from saturn.llm.keys import MissingKeyError, load_api_keys
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("SATURN_LLM_DISABLE_CONFIG_MANAGER", "1")
+    with pytest.raises(MissingKeyError, match="anthropic"):
+        load_api_keys(["anthropic"])
+
+
 # ---------- routes thread api_key through to the runner ----------------------
 
 

@@ -110,6 +110,11 @@ def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str |
       does (config manager, env vars). If no key is reachable the LLM pass
       will fail open and the deterministic stats still write.
 
+    Ollama is a special case: it can run keyless against a localhost endpoint.
+    When provider == "ollama" and api_key is empty, we substitute the literal
+    sentinel "local" so the gateway's MissingKeyError check passes and the
+    OllamaProvider falls through to its OLLAMA_HOST default.
+
     Returning (None, None) means "skip the LLM pass entirely."
     """
     if allow_no_llm and form.get("no_llm") == "1":
@@ -119,6 +124,10 @@ def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str |
     if api_key and not provider:
         # User pasted a key but no provider — assume the most-common case.
         provider = "anthropic"
+    # Ollama can run with no real key; gateway just needs *something* truthy
+    # to avoid MissingKeyError. The provider class itself will pick the host.
+    if provider and provider.split(":", 1)[0] == "ollama" and not api_key:
+        api_key = "local"
     return provider, api_key
 
 

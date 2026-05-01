@@ -1,4 +1,5 @@
 {% extends "base.html.j2" %}
+{% from "_macros.html.j2" import byok_fields %}
 {% block title %}saturn — dataset readings{% endblock %}
 {% block main %}
 
@@ -23,20 +24,8 @@
       <input type="file" name="file" id="file-input"
              accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet,.feather,.arrow,.xlsx,.xls,.xlsb,.ods,.db,.sqlite,.sqlite3">
     </label>
-    <details class="field byok">
-      <summary>Use a different model (optional)</summary>
-      <p class="hint">By default this demo runs Opus on the server's account. Paste your own API key here to use a different provider — it's used once for this run and never stored.</p>
-      <label for="upload-llm">Provider</label>
-      <select id="upload-llm" name="llm">
-        <option value="anthropic">anthropic</option>
-        <option value="openai">openai</option>
-        <option value="groq">groq</option>
-        <option value="gemini">gemini</option>
-        <option value="mistral">mistral</option>
-      </select>
-      <label for="upload-key">API key</label>
-      <input type="password" id="upload-key" name="api_key" autocomplete="off" placeholder="sk-…">
-    </details>
+    <p class="hint" style="margin-bottom: 0.25rem;">By default this demo runs Opus on the server's account. Paste your own API key below to use a different provider — it's used once for this run and never stored. Pick "ollama (local)" to call a self-hosted model (only reachable when saturn runs on your own machine).</p>
+    {{ byok_fields("upload", default_provider=default_llm, compact=True) }}
     <label class="checkbox">
       <input type="checkbox" name="no_llm" value="1">
       <span>stats only, skip summary</span>
@@ -52,19 +41,7 @@
       <label for="hf-repo">Repo id</label>
       <input type="text" id="hf-repo" name="repo" placeholder="user/dataset" required pattern="[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+">
     </div>
-    <details class="field byok">
-      <summary>Use a different model (optional)</summary>
-      <label for="hf-llm">Provider</label>
-      <select id="hf-llm" name="llm">
-        <option value="anthropic">anthropic</option>
-        <option value="openai">openai</option>
-        <option value="groq">groq</option>
-        <option value="gemini">gemini</option>
-        <option value="mistral">mistral</option>
-      </select>
-      <label for="hf-key">API key</label>
-      <input type="password" id="hf-key" name="api_key" autocomplete="off" placeholder="sk-…">
-    </details>
+    {{ byok_fields("hf", default_provider=default_llm, compact=True) }}
     <label class="checkbox">
       <input type="checkbox" name="no_llm" value="1">
       <span>stats only, skip summary</span>

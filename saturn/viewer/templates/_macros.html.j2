@@ -51,17 +51,24 @@
 {# Reusable BYOK form fields. Drop these inside any POST form that hits a
    route which calls _resolve_llm_request(). The user can paste their own
    provider key per request; the server's keys are never consulted on a
-   public-facing instance. #}
+   public-facing instance.
+
+   The "ollama" option lets self-hosted saturn talk to a local Ollama
+   server. Leave the API key field empty to use the default localhost
+   endpoint, paste a bearer token for hosted Ollama-compatible endpoints
+   (e.g., api.assisted.space). On the public viewer, ollama only works
+   if the *server* exposes one — local-to-the-user ollama is reachable
+   only when saturn itself runs on the user's box. #}
 {% macro byok_fields(prefix, default_provider="anthropic", compact=False) %}
   <details class="field byok"{% if not compact %} open{% endif %}>
     <summary>API key (used once, not stored)</summary>
     <label for="{{ prefix }}-llm">Provider</label>
     <select id="{{ prefix }}-llm" name="llm">
-      {% for p in ["anthropic", "openai", "groq", "gemini", "mistral", "cohere"] %}
-        <option value="{{ p }}"{% if p == default_provider %} selected{% endif %}>{{ p }}</option>
+      {% for p in ["anthropic", "openai", "groq", "gemini", "mistral", "cohere", "xai", "perplexity", "huggingface", "ollama"] %}
+        <option value="{{ p }}"{% if p == default_provider %} selected{% endif %}>{{ p }}{% if p == "ollama" %} (local){% endif %}</option>
       {% endfor %}
     </select>
     <label for="{{ prefix }}-key">API key</label>
-    <input type="password" id="{{ prefix }}-key" name="api_key" autocomplete="off" placeholder="sk-…">
+    <input type="password" id="{{ prefix }}-key" name="api_key" autocomplete="off" placeholder="sk-… (leave empty for ollama localhost)">
   </details>
 {% endmacro %}

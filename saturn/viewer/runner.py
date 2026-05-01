@@ -117,6 +117,9 @@ _PROVIDER_KEY_ENV = {
     "xai": "XAI_API_KEY",
     "perplexity": "PERPLEXITY_API_KEY",
     "huggingface": "HF_TOKEN",
+    # Ollama is keyless against localhost; a non-"local" value here is treated
+    # as a Bearer token for hosted Ollama-compatible endpoints.
+    "ollama": "OLLAMA_API_KEY",
 }
 
 
@@ -231,8 +234,16 @@ def _build_subprocess_env(provider_spec: str | None, api_key: str | None) -> dic
         for ev in _PROVIDER_KEY_ENV.values():
             env.pop(ev, None)
         provider = provider_spec.split(":", 1)[0]
-        env_var = _PROVIDER_KEY_ENV.get(provider, f"{provider.upper()}_API_KEY")
-        env[env_var] = api_key
+        # Ollama with the "local" sentinel needs neither OLLAMA_HOST nor
+        # OLLAMA_API_KEY — the provider class falls back to localhost:11434.
+        # Setting OLLAMA_API_KEY=local would make the provider send a literal
+        # "Authorization: Bearer local" header, which an unauthenticated
+        # localhost ollama would reject.
+        if provider == "ollama" and api_key == "local":
+            pass
+        else:
+            env_var = _PROVIDER_KEY_ENV.get(provider, f"{provider.upper()}_API_KEY")
+            env[env_var] = api_key
     elif provider_spec:
         # No BYOK + provider was requested → scrub ConfigManager fallback so
         # the public form can't silently use the server's docs/API_KEYS.md.
