@@ -352,14 +352,27 @@ class FileAdapter(SourceAdapter):
     SQLite falls back to DuckDB (polars has no direct SQLite reader).
     """
 
-    def __init__(self, path: str | Path, table: str | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        table: str | None = None,
+        sheet: str | int | None = None,
+    ) -> None:
+        """`table` selects a SQLite table; `sheet` picks an Excel/ODS sheet.
+
+        `sheet` accepts a name (`"summary"`) or 1-based index (`2`). Default
+        is the first sheet but a warning is logged when more exist so the
+        user knows their workbook has tabs they aren't seeing.
+        """
         self.path = Path(path)
         self.source = str(self.path)
         self.table = table
+        self.sheet = sheet
         self._schema: Schema | None = None
         self._row_count: int | None = None
         self._con = None
         self._df: "pl.DataFrame | None" = None
+        self._sheet_names: list[str] | None = None
 
     def _conn(self):
         import duckdb
@@ -424,22 +437,72 @@ class FileAdapter(SourceAdapter):
         """Load formats DuckDB doesn't handle natively, via polars.
 
         XLSX/XLS/XLSB/ODS route through `fastexcel` (polars default backend).
-        For multi-sheet workbooks we take the first sheet — users wanting a
-        specific sheet should export it to CSV first.
+        For multi-sheet workbooks: defaults to the first sheet but emits a
+        warning so the caller knows other sheets exist. Pass `sheet="name"`
+        or `sheet=N` (1-based) to FileAdapter to pick a specific one.
         """
         import polars as pl
 
         ext = self.path.suffix.lower()
         if ext in {".xlsx", ".xls", ".xlsb", ".ods"}:
-            frame = pl.read_excel(self.path)
-            if isinstance(frame, dict):  # multi-sheet workbook
-                frame = next(iter(frame.values()))
+            frame = pl.read_excel(self.path, sheet_id=0)  # 0 = all sheets as dict
+            if isinstance(frame, dict):
+                names = list(frame.keys())
+                self._sheet_names = names
+                if self.sheet is not None:
+                    chosen = self._resolve_sheet(self.sheet, names)
+                    if chosen not in frame:
+                        raise ValueError(
+                            f"sheet {self.sheet!r} not found in {self.path.name}; "
+                            f"available: {names}"
+                        )
+                    frame = frame[chosen]
+                    self.source = f"{self.path}#{chosen}"
+                else:
+                    chosen = names[0]
+                    if len(names) > 1:
+                        from rich.console import Console
+                        Console(stderr=True).print(
+                            f"[yellow]workbook has {len(names)} sheets; "
+                            f"profiling [bold]{chosen!r}[/]. Use --sheet to pick "
+                            f"another. Sheets: {names}[/]"
+                        )
+                    frame = frame[chosen]
+                    self.source = f"{self.path}#{chosen}"
             return frame
         if ext == ".tsv":
             return pl.read_csv(self.path, separator="\t", infer_schema_length=5_000)
         if ext in {".feather", ".arrow"}:
             return pl.read_ipc(self.path)
         raise ValueError(f"no polars direct loader for {ext}")
+
+    @staticmethod
+    def _resolve_sheet(spec: str | int, names: list[str]) -> str:
+        """Allow either a sheet name or a 1-based index."""
+        if isinstance(spec, int):
+            if spec < 1 or spec > len(names):
+                raise ValueError(f"sheet index {spec} out of range (1..{len(names)})")
+            return names[spec - 1]
+        # String — first try exact match, then case-insensitive
+        if spec in names:
+            return spec
+        for n in names:
+            if n.lower() == spec.lower():
+                return n
+        # Allow numeric strings
+        if spec.isdigit():
+            return FileAdapter._resolve_sheet(int(spec), names)
+        return spec  # let _load_with_polars raise with the available list
+
+    def list_sheets(self) -> list[str] | None:
+        """For Excel-family files: return all sheet names. None for other types."""
+        ext = self.path.suffix.lower()
+        if ext not in {".xlsx", ".xls", ".xlsb", ".ods"}:
+            return None
+        if self._sheet_names is None:
+            # Trigger a load to populate the cache
+            self.load_dataframe()
+        return self._sheet_names
 
     def schema(self) -> Schema:
         if self._schema is not None:
@@ -460,25 +523,30 @@ class FileAdapter(SourceAdapter):
             return self._df
 
         ext = self.path.suffix.lower()
-        try:
-            if ext in self._POLARS_DIRECT:
-                df = _ensure_frame(self._load_with_polars())
-            elif ext == ".parquet":
-                df = pl.read_parquet(self.path)
-            elif ext == ".csv":
-                df = pl.read_csv(self.path, infer_schema_length=5_000)
-            elif ext in {".jsonl", ".ndjson"}:
-                df = pl.read_ndjson(self.path)
-            elif ext == ".json":
-                df = pl.read_json(self.path)
-            else:
-                # SQLite (and fallback): go through DuckDB's arrow export
+        if ext in self._POLARS_DIRECT:
+            # Excel/ODS/TSV/Feather: don't fall through to DuckDB on error,
+            # since DuckDB doesn't handle most of these and a sheet-not-found
+            # ValueError shouldn't be replaced by a confusing "Unsupported
+            # file type" from the fallback path.
+            df = _ensure_frame(self._load_with_polars())
+        else:
+            try:
+                if ext == ".parquet":
+                    df = pl.read_parquet(self.path)
+                elif ext == ".csv":
+                    df = pl.read_csv(self.path, infer_schema_length=5_000)
+                elif ext in {".jsonl", ".ndjson"}:
+                    df = pl.read_ndjson(self.path)
+                elif ext == ".json":
+                    df = pl.read_json(self.path)
+                else:
+                    # SQLite (and fallback): go through DuckDB's arrow export
+                    tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
+                    df = _ensure_frame(pl.from_arrow(tbl))
+            except Exception:
+                # last-ditch: DuckDB can read almost anything we haven't caught
                 tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
                 df = _ensure_frame(pl.from_arrow(tbl))
-        except Exception:
-            # last-ditch: DuckDB can read almost anything we haven't caught
-            tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
-            df = _ensure_frame(pl.from_arrow(tbl))
 
         self._df = df
         self._row_count = df.height
@@ -546,14 +614,21 @@ def sample_from_dataframe(df: "pl.DataFrame", n: int, seed: int = 42) -> list[di
     return df.sample(n=n, seed=seed, shuffle=True).to_dicts()
 
 
-def adapter_for(source: str, *, split: str | None = None, config: str | None = None) -> SourceAdapter:
+def adapter_for(
+    source: str,
+    *,
+    split: str | None = None,
+    config: str | None = None,
+    sheet: str | int | None = None,
+) -> SourceAdapter:
     """`repo/name` or `hf://repo/name` → HF; everything else → local file.
 
     `split=None` means "every split concatenated" for HF datasets — the right
-    default for a tool that dissects whole corpora.
+    default for a tool that dissects whole corpora. `sheet` is only meaningful
+    for Excel/ODS files; ignored otherwise.
     """
     if source.startswith("hf://"):
         return HFAdapter(source.removeprefix("hf://"), split=split, config=config)
     if "/" in source and not Path(source).exists():
         return HFAdapter(source, split=split, config=config)
-    return FileAdapter(source)
+    return FileAdapter(source, sheet=sheet)

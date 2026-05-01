@@ -181,3 +181,82 @@ def test_sqlite_picks_largest_table_when_multiple(tmp_path):
     df = FileAdapter(db).load_dataframe()
     assert df.height == 100  # picked big_table, not empty_table
     assert "label" in df.columns
+
+
+# ---------- multi-sheet XLSX picker -----------------------------------------
+
+
+def _three_sheet_workbook(path):
+    import xlsxwriter
+
+    with xlsxwriter.Workbook(str(path)) as wb:
+        first = wb.add_worksheet("summary")
+        first.write_row(0, 0, ["a", "b"])
+        first.write_row(1, 0, [1, 2])
+        first.write_row(2, 0, [3, 4])
+        second = wb.add_worksheet("details")
+        second.write_row(0, 0, ["x", "y", "z"])
+        for i in range(10):
+            second.write_row(i + 1, 0, [i, i * 2, i * 3])
+        third = wb.add_worksheet("notes")
+        third.write_row(0, 0, ["txt"])
+        third.write_row(1, 0, ["alpha"])
+
+
+def test_xlsx_picks_first_sheet_by_default(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    df = FileAdapter(path).load_dataframe()
+    # Default = sheet 0 = "summary"
+    assert df.columns == ["a", "b"]
+    assert df.height == 2
+
+
+def test_xlsx_picks_named_sheet(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    df = FileAdapter(path, sheet="details").load_dataframe()
+    assert df.columns == ["x", "y", "z"]
+    assert df.height == 10
+
+
+def test_xlsx_picks_sheet_by_1_based_index(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    df = FileAdapter(path, sheet=2).load_dataframe()
+    assert df.columns == ["x", "y", "z"]
+
+
+def test_xlsx_unknown_sheet_raises(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    with pytest.raises(ValueError, match="not found"):
+        FileAdapter(path, sheet="phantom").load_dataframe()
+
+
+def test_xlsx_sheet_index_out_of_range_raises(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    with pytest.raises(ValueError, match="out of range"):
+        FileAdapter(path, sheet=99).load_dataframe()
+
+
+def test_xlsx_list_sheets_after_load(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    a = FileAdapter(path)
+    assert a.list_sheets() == ["summary", "details", "notes"]
+
+
+def test_list_sheets_returns_none_for_csv(tmp_path):
+    path = tmp_path / "demo.csv"
+    path.write_text("a,b\n1,2\n")
+    assert FileAdapter(path).list_sheets() is None
+
+
+def test_xlsx_source_includes_chosen_sheet(tmp_path):
+    path = tmp_path / "multi.xlsx"
+    _three_sheet_workbook(path)
+    a = FileAdapter(path, sheet="details")
+    a.load_dataframe()
+    assert a.source.endswith("#details")

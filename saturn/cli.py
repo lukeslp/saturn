@@ -141,11 +141,13 @@ def _run(
     open_browser: bool,
     llm_spec: list[str] | None,
     sample_size: int | None,
+    sheet: str | int | None = None,
 ) -> None:
     """Common pipeline: adapter -> schema -> profile -> assemble -> insights -> emit.
 
     `sample_size=None` means full-corpus (vectorised polars path); any int
     switches to reservoir sampling over streamed batches.
+    `sheet` only applies to Excel/ODS files.
     """
     mode_label = "full corpus" if sample_size is None else f"sample mode, n={sample_size}"
     console.print(
@@ -155,7 +157,7 @@ def _run(
         )
     )
 
-    adapter = adapter_for(source, split=split, config=config)
+    adapter = adapter_for(source, split=split, config=config, sheet=sheet)
     console.print(f"[dim]adapter:[/] {type(adapter).__name__}  [dim]→[/] {adapter.source}")
 
     if sample_size is None:
@@ -255,6 +257,11 @@ def analyze(
         help="provider[:model] to run insight pass. Repeat for primary + critic. "
              "Example: --llm anthropic --llm openai:gpt-4o-mini",
     ),
+    sheet: str | None = typer.Option(
+        None,
+        "--sheet",
+        help="for XLSX/ODS files: sheet name or 1-based index (default: first sheet)",
+    ),
 ) -> None:
     _run(
         source,
@@ -266,6 +273,7 @@ def analyze(
         open_browser=open_browser,
         llm_spec=llm_spec,
         sample_size=sample_size,
+        sheet=sheet,
     )
 
 
