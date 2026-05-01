@@ -35,7 +35,7 @@ def test_column_prompt_is_deterministic_and_cites_evidence_keys():
     assert PROMPT_VERSION in sys1
 
 
-def test_dataset_prompt_includes_version_tag_and_hotspots():
+def test_dataset_prompt_includes_version_tag_and_featured_charts():
     ev = {
         "source": "hf://x/y",
         "row_count": 10,
@@ -45,7 +45,9 @@ def test_dataset_prompt_includes_version_tag_and_hotspots():
     }
     sys, user = build_dataset_prompt(ev)
     assert PROMPT_VERSION in sys
-    assert "hotspots" in sys
+    # `featured_charts` replaced the old `hotspots` field in v2 — single
+    # source of "what's worth looking at" rather than two parallel arrays.
+    assert "featured_charts" in sys
     assert "hf://x/y" in user
 
 

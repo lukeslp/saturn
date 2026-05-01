@@ -32,12 +32,12 @@ Return a single JSON object with these keys:
 - narrative: 3-6 sentences. Open with what the dataset is, then the 1-2 things worth a closer look.
 - confidence: "high" | "medium" | "low".
 - evidence_keys: array of stat keys you used.
-- hotspots: array of column names worth follow-up.
 - featured_charts: array of 3 to 5 objects of shape {{"column": str, "kind": str, "caption": str}}. `kind` must be one of "histogram" | "bar" | "donut" | "length" depending on what fits the column. Pick columns that tell the most about the dataset; the caption is one sentence saying what to look for.
 Rules:
 - Never invent numbers. Only cite values present in the evidence payload.
 - featured_charts must reference columns that actually exist in the evidence.
 - Do not pick columns whose only signal is "near_unique" or "all_null" — they make boring charts.
+- Strict JSON: no trailing commas, every key:value separated by a single comma.
 Tag: {PROMPT_VERSION}
 """
 

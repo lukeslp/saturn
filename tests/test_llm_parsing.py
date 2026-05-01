@@ -95,3 +95,21 @@ def test_extract_json_falls_back_to_greedy_when_balanced_invalid():
     # No real-world response looks like this; this just guards the fallback path.
     raw = '{"a": 1, "b": [{"x": 2}, {"y": 3}]}'
     assert extract_json(raw) == {"a": 1, "b": [{"x": 2}, {"y": 3}]}
+
+
+def test_extract_json_tolerates_trailing_comma_in_object():
+    """JSON5 fallback accepts trailing comma in object."""
+    raw = '{"a": 1, "b": 2,}'
+    assert extract_json(raw) == {"a": 1, "b": 2}
+
+
+def test_extract_json_tolerates_trailing_comma_in_array():
+    raw = '{"items": [1, 2, 3,]}'
+    assert extract_json(raw) == {"items": [1, 2, 3]}
+
+
+def test_extract_json_strict_first_then_lenient():
+    """Strict json.loads runs first; lenient only when strict fails."""
+    # Valid strict JSON: must parse on the strict path (no surprise from lenient).
+    raw = '{"clean": true}'
+    assert extract_json(raw) == {"clean": True}

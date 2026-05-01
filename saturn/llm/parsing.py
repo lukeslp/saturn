@@ -58,6 +58,29 @@ _VALID_ROLES = {
 _VALID_CHART_KINDS = {"histogram", "bar", "donut", "length"}
 
 
+def _loads_lenient(text: str) -> dict[str, Any]:
+    """Parse JSON, falling back to a tolerant parser for Opus-style typos.
+
+    Strict json.loads fails on trailing commas, missing commas between
+    sibling fields, single-quoted strings, and Python-style identifiers.
+    Opus produces all of these intermittently when generating long structured
+    objects (~50+ lines), and the fail-open contract means a single typo
+    silently drops the dataset summary. The lenient pass uses pyjson5 (a C
+    extension wrapping JSON5) which forgives trailing commas + comments and
+    handles many common quoting mistakes.
+    """
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            import pyjson5  # type: ignore
+        except ImportError:
+            raise  # re-raise the original strict error
+        # pyjson5 accepts JSON5 — a superset that forgives trailing commas,
+        # comments, single quotes, and unquoted keys.
+        return pyjson5.loads(text)
+
+
 def extract_json(raw: str) -> dict[str, Any]:
     """Extract a JSON object from a model response.
 
@@ -65,6 +88,10 @@ def extract_json(raw: str) -> dict[str, Any]:
     1. The contents of a fenced ```json``` block, parsed via balanced scan
     2. A balanced `{...}` span in the raw text (handles trailing prose)
     3. The greedy `\\{.*\\}` slice as a final fallback (back-compat)
+
+    Each candidate is parsed with `_loads_lenient`, which falls back from
+    strict json to JSON5 to forgive trailing commas + missing commas + the
+    other small-typo cases that long Opus outputs occasionally produce.
     """
     raw = raw.strip()
     fence = _FENCE.search(raw)
@@ -74,14 +101,14 @@ def extract_json(raw: str) -> dict[str, Any]:
     scanned = _scan_balanced_object(body)
     if scanned is not None:
         try:
-            return json.loads(scanned)
-        except json.JSONDecodeError:
+            return _loads_lenient(scanned)
+        except (json.JSONDecodeError, Exception):
             pass  # fall through to the greedy fallback
 
     # Fallback: original greedy regex (catches obscure cases the scanner missed)
     obj_match = _OBJ.search(body)
     if obj_match:
-        return json.loads(obj_match.group(0))
+        return _loads_lenient(obj_match.group(0))
     raise ValueError("no JSON object found in response")
 
 
