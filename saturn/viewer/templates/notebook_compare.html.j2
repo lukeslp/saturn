@@ -189,7 +189,7 @@ subprocess.run([
   {% set year = doc.raw.generated_at[:4] if doc.raw.generated_at else '' %}
   {% set prompt_version = 'saturn-insight-v2' if insights.providers else '' %}
   {% set models = insights.providers | join(', ') if insights.providers else '' %}
-  {% set view_url = (request.url_root.rstrip('/') ~ url_for('view', id=doc.id)) if request else url_for('view', id=doc.id) %}
+  {% set view_url = url_for('view', id=doc.id, _external=True) %}
   <section class="cite-block" aria-labelledby="cite-heading-cmp">
     <h2 id="cite-heading-cmp">How to cite</h2>
     <p class="muted" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase;">click to copy</p>
