@@ -1422,3 +1422,62 @@ a:focus-visible {
   margin-top: calc(var(--step) * 1);
   max-width: var(--measure);
 }
+
+/* Index filter + pager */
+.readings-controls {
+  display: flex;
+  gap: calc(var(--step) * 2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: calc(var(--step) * 3);
+  padding-bottom: calc(var(--step) * 2);
+  border-bottom: 1px solid var(--rule);
+}
+.readings-controls input[type="search"] {
+  flex: 1;
+  min-width: 240px;
+  padding: calc(var(--step) * 1.5);
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+.readings-controls input[type="search"]:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: -1px;
+  border-color: var(--hot);
+}
+.readings-controls fieldset.readings-kind {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: calc(var(--step) * 1.5);
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.readings-controls fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.readings-controls fieldset input[type="radio"] { accent-color: var(--hot); }
+.readings-controls fieldset input[type="radio"]:checked + * { color: var(--hot); }
+.readings-controls fieldset label:has(input:checked) { color: var(--hot); }
+
+.readings-pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: calc(var(--step) * 3);
+  padding: calc(var(--step) * 3) 0;
+  margin-top: calc(var(--step) * 2);
+  border-top: 1px solid var(--rule);
+}
+.readings-pager button:disabled { opacity: 0.4; cursor: not-allowed; }

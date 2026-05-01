@@ -279,3 +279,34 @@ def test_prefix_middleware_ignores_header_when_not_trusted(tmp_path, monkeypatch
     body = resp.get_data(as_text=True)
     assert 'href="/hacker/' not in body
     assert 'href="/view/demo"' in body  # plain root, no prefix
+
+
+def test_index_renders_filter_controls_when_findings_exist(client):
+    """Filter UI surfaces only when there are readings to filter."""
+    resp = client.get("/")
+    body = resp.get_data(as_text=True)
+    assert 'id="readings-filter"' in body
+    assert 'name="kind"' in body
+    assert 'index-filter.js' in body
+    # data attributes drive the JS — verify they're emitted on each article
+    assert 'data-name=' in body
+    assert 'data-kind=' in body
+    assert 'data-source=' in body
+
+
+def test_index_omits_filter_when_no_findings(tmp_path):
+    """No findings → no filter UI (less to scan past for empty installs)."""
+    app = create_app(findings_dir=tmp_path, testing=True)
+    body = app.test_client().get("/").get_data(as_text=True)
+    assert 'id="readings-filter"' not in body
+    assert "No readings yet" in body
+
+
+def test_filter_js_progressive_enhancement(client):
+    """The pager hides via the [hidden] attribute by default — page works without JS."""
+    resp = client.get("/")
+    body = resp.get_data(as_text=True)
+    # readings-pager element exists but starts hidden; JS reveals when needed
+    assert 'class="readings-pager"' in body
+    # readings-empty also starts hidden
+    assert 'id="readings-empty"' in body

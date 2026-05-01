@@ -77,15 +77,37 @@
 <section class="readings" aria-label="Existing readings">
   <header>
     <h2>Readings</h2>
-    <span class="count">{{ "%02d" | format(docs|length) }} files</span>
+    <span class="count" id="readings-count">{{ "%03d" | format(docs|length) }} files</span>
   </header>
+
   {% if docs %}
+  <div class="readings-controls" role="search" aria-label="Filter readings">
+    <label class="visually-hidden" for="readings-filter">Filter by name or source</label>
+    <input type="search"
+           id="readings-filter"
+           placeholder="Filter by name or source… (try: language · firehose · accessibility)"
+           autocomplete="off"
+           inputmode="search">
+    <fieldset class="readings-kind">
+      <legend class="visually-hidden">Kind</legend>
+      <label><input type="radio" name="kind" value="all" checked> all</label>
+      <label><input type="radio" name="kind" value="profile"> profile</label>
+      <label><input type="radio" name="kind" value="compare"> compare</label>
+      <label><input type="radio" name="kind" value="reading"> with summary</label>
+    </fieldset>
+  </div>
+
+  <div id="readings-list" data-page-size="50">
     {% for d in docs %}
       {% set has_insights = d.raw.get('insights') and d.raw['insights'].get('insights') %}
       {% set first_insight = has_insights and d.raw['insights']['insights'][0] or None %}
-      <article class="reading">
+      <article class="reading"
+               data-name="{{ d.id }}"
+               data-kind="{{ d.kind.value }}"
+               data-source="{{ d.meta.source if d.kind.value == 'profile' else (d.a_label ~ ' vs ' ~ d.b_label) }}"
+               data-has-insight="{{ '1' if has_insights else '0' }}">
         <div>
-          <div class="numeral">{{ "%02d" | format(loop.index) }} / {{ "%02d" | format(docs|length) }}</div>
+          <div class="numeral"><span class="numeral-current">{{ "%03d" | format(loop.index) }}</span> / {{ "%03d" | format(docs|length) }}</div>
           <div class="stamps">
             <span class="stamp">{{ d.kind.value }}</span>
             {% if has_insights %}<span class="stamp stamp--insight">reading</span>{% endif %}
@@ -104,13 +126,24 @@
             <p class="preview">{{ first_insight.narrative }}</p>
           {% else %}
             <p class="preview" style="color: var(--muted);">
-              No plain-language summary yet — open the reading to generate one with your own API key.
+              No plain-language summary yet — open the reading to generate one.
             </p>
           {% endif %}
         </div>
         <a class="open" href="{{ url_for('view', id=d.id) }}">Open</a>
       </article>
     {% endfor %}
+  </div>
+
+  <nav class="readings-pager" aria-label="Pagination" hidden>
+    <button type="button" id="pager-prev" class="btn btn-ghost btn-small">← previous</button>
+    <span id="pager-info" class="muted" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em;"></span>
+    <button type="button" id="pager-next" class="btn btn-ghost btn-small">next →</button>
+  </nav>
+
+  <p id="readings-empty" class="muted" hidden style="text-align: center; padding: 3rem; font-style: italic;">
+    No readings match this filter.
+  </p>
   {% else %}
     <div class="empty">
       <p>No readings yet. Upload a file or point at a HuggingFace repo above.</p>
@@ -121,4 +154,5 @@
 {% endblock %}
 {% block foot_extra %}
 <script src="{{ url_for('static', filename='dropzone.js') }}" defer></script>
+<script src="{{ url_for('static', filename='index-filter.js') }}" defer></script>
 {% endblock %}
