@@ -1,0 +1,474 @@
+{% extends "base.html.j2" %}
+{% from "_macros.html.j2" import byok_fields %}
+{% block title %}Saturn — Datasheet Annual style guide{% endblock %}
+{% block head_extra %}
+<style>
+  /* Style guide chrome — keeps the demo content honest by living next to its source */
+  .sg-section { margin: calc(var(--step) * 6) 0; padding-top: calc(var(--step) * 3); border-top: 1px solid var(--rule); }
+  .sg-section:first-of-type { border-top: 0; }
+  .sg-section h2 { font-family: var(--font-display); font-variation-settings: "opsz" 144, "wght" 600, "SOFT" 30; font-size: var(--size-h2); margin: 0 0 calc(var(--step) * 1) 0; letter-spacing: -0.015em; }
+  .sg-section .sg-lede { font-size: var(--size-lede); max-width: var(--measure); color: var(--ink-soft); margin: 0 0 calc(var(--step) * 4) 0; }
+  .sg-pair { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--step) * 3); align-items: start; }
+  @media (max-width: 900px) { .sg-pair { grid-template-columns: 1fr; } }
+  .sg-demo { background: var(--paper); border: 1px solid var(--rule); padding: calc(var(--step) * 3); border-radius: var(--radius); min-height: 140px; }
+  .sg-demo + .sg-source pre,
+  .sg-source pre { margin: 0; background: var(--paper-raise); padding: calc(var(--step) * 2); border-radius: var(--radius); font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow: auto; border: 1px solid var(--rule); }
+  .sg-source { display: flex; flex-direction: column; }
+  .sg-source-label { font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: calc(var(--step) * 1); }
+
+  /* Token swatch grid */
+  .sg-tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: calc(var(--step) * 2); }
+  .sg-swatch { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+  .sg-swatch .chip-color { height: 64px; }
+  .sg-swatch dl { margin: 0; padding: calc(var(--step) * 1.25) calc(var(--step) * 1.5); font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.06em; }
+  .sg-swatch dt { color: var(--muted); }
+  .sg-swatch dd { margin: 2px 0 0 0; color: var(--ink); text-transform: lowercase; }
+
+  /* Type spec */
+  .sg-type { display: flex; flex-direction: column; gap: calc(var(--step) * 3); }
+  .sg-type-row { padding-bottom: calc(var(--step) * 2); border-bottom: 1px dashed var(--rule); }
+  .sg-type-row:last-child { border-bottom: 0; }
+  .sg-type-label { font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .sg-type-sample { line-height: 1.1; }
+
+  .sg-kit { display: flex; flex-wrap: wrap; gap: calc(var(--step) * 1.5); align-items: center; margin: calc(var(--step) * 2) 0; }
+  .sg-toc { position: sticky; top: calc(var(--step) * 2); align-self: start; }
+  .sg-toc ul { list-style: none; padding: 0; margin: 0; font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.08em; }
+  .sg-toc li { padding: 4px 0; }
+  .sg-toc a { text-decoration: none; color: var(--muted); }
+  .sg-toc a:hover { color: var(--hot); }
+
+  .sg-hero { grid-column: 1 / -1; margin-bottom: calc(var(--step) * 5); padding-bottom: calc(var(--step) * 4); border-bottom: 2px solid var(--ink); }
+  .sg-hero h1 { font-family: var(--font-display); font-variation-settings: "opsz" 144, "wght" 400, "SOFT" 100, "WONK" 1; font-size: clamp(2.4rem, 4vw + 1rem, 4rem); line-height: 1.02; letter-spacing: -0.025em; margin: 0 0 calc(var(--step) * 2) 0; max-width: 22ch; }
+  .sg-hero h1 em { font-style: italic; color: var(--hot); }
+  .sg-hero .lede { font-size: var(--size-lede); max-width: var(--measure); color: var(--ink-soft); }
+</style>
+{% endblock %}
+{% block main %}
+
+<header class="sg-hero">
+  <p class="eyebrow" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hot); margin: 0 0 1rem 0;">design system · v1.0</p>
+  <h1>Saturn — <em>Datasheet Annual</em></h1>
+  <p class="lede">A warm-paper, ink-and-signal-red type system for tools that read like a research notebook. Fraunces variable serif for the prose; IBM Plex Mono for the data; one accent color used sparingly. Every component lives next to its source markup so you can lift what you need.</p>
+</header>
+
+<aside class="sg-toc" style="grid-column: 1 / 4;">
+  <p class="sg-source-label" style="margin-bottom: calc(var(--step) * 1);">contents</p>
+  <ul>
+    <li><a href="#install">01 · Install</a></li>
+    <li><a href="#tokens">02 · Tokens</a></li>
+    <li><a href="#type">03 · Typography</a></li>
+    <li><a href="#chips">04 · Chips &amp; alerts</a></li>
+    <li><a href="#buttons">05 · Buttons</a></li>
+    <li><a href="#fields">06 · Form fields</a></li>
+    <li><a href="#cells">07 · Notebook cells</a></li>
+    <li><a href="#cards">08 · Summary card</a></li>
+    <li><a href="#tables">09 · Tables</a></li>
+    <li><a href="#dropzone">10 · Drop zone</a></li>
+    <li><a href="#footer">11 · Reproducibility footer</a></li>
+  </ul>
+</aside>
+
+<div style="grid-column: 4 / -1;">
+
+<!-- ============================================================ -->
+<section class="sg-section" id="install">
+  <h2>01 · Install</h2>
+  <p class="sg-lede">Two files do all the work: the stylesheet and the Google Fonts link. Drop these into any Flask/Jinja app and the rest of this guide just works.</p>
+  <div class="sg-source">
+    <span class="sg-source-label">Markup</span>
+<pre>&lt;link rel="preconnect" href="https://fonts.googleapis.com"&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin&gt;
+&lt;link rel="stylesheet" href="/static/saturn.css"&gt;</pre>
+  </div>
+  <p class="sg-lede" style="margin-top: 2rem;">Source: <a href="https://github.com/lukeslp/saturn/blob/main/saturn/viewer/static/saturn.css"><code>saturn/viewer/static/saturn.css</code></a> · ~1300 lines including notebook cells, chips, drop zone, dark mode, and <code>prefers-reduced-motion</code>. Vendor it.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="tokens">
+  <h2>02 · Tokens</h2>
+  <p class="sg-lede">CSS variables live on <code>:root</code>. The <code>@media (prefers-color-scheme: dark)</code> block re-binds the same names. Ten tokens cover the whole system.</p>
+  <div class="sg-tokens">
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--paper);"></div><dl><dt>--paper</dt><dd>warm bone</dd><dt>HEX</dt><dd>#F4F1EA</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--paper-raise);"></div><dl><dt>--paper-raise</dt><dd>raised paper</dd><dt>HEX</dt><dd>#EFEBE1</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--ink);"></div><dl><dt>--ink</dt><dd>near black</dd><dt>HEX</dt><dd>#161616</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--ink-soft);"></div><dl><dt>--ink-soft</dt><dd>body text</dd><dt>HEX</dt><dd>#3F3F3F</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--muted);"></div><dl><dt>--muted</dt><dd>captions, labels</dd><dt>HEX</dt><dd>#6B6863</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--hot);"></div><dl><dt>--hot</dt><dd>signal red</dd><dt>HEX</dt><dd>#CE3526</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--cool);"></div><dl><dt>--cool</dt><dd>secondary accent</dd><dt>HEX</dt><dd>#2F5D8F</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--warn);"></div><dl><dt>--warn</dt><dd>warning</dd><dt>HEX</dt><dd>#B26A00</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--good);"></div><dl><dt>--good</dt><dd>success</dd><dt>HEX</dt><dd>#2F6C3F</dd></dl></div>
+    <div class="sg-swatch"><div class="chip-color" style="background: var(--rule);"></div><dl><dt>--rule</dt><dd>hairlines</dd><dt>HEX</dt><dd>rgba 14%</dd></dl></div>
+  </div>
+  <div class="sg-source" style="margin-top: 2rem;">
+    <span class="sg-source-label">CSS</span>
+<pre>:root {
+  --paper: #F4F1EA;
+  --paper-raise: #EFEBE1;
+  --ink: #161616;
+  --ink-soft: #3F3F3F;
+  --muted: #6B6863;
+  --hot: #CE3526;
+  --hot-wash: rgba(206, 53, 38, 0.08);
+  --cool: #2F5D8F;
+  --warn: #B26A00;
+  --good: #2F6C3F;
+  --rule: rgba(22, 22, 22, 0.14);
+  --rule-strong: rgba(22, 22, 22, 0.32);
+}</pre>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="type">
+  <h2>03 · Typography</h2>
+  <p class="sg-lede">Fraunces is a variable serif with optical-size, weight, soft, and wonky axes. We push <code>opsz</code> to 144 for headlines, drop to 36 for small headings; <code>WONK</code> is set to 1 only on hot/italic display moments. IBM Plex Mono with tabular-nums for every number that needs to align.</p>
+  <div class="sg-type">
+    <div class="sg-type-row">
+      <p class="sg-type-label">DISPLAY · opsz 144 · wght 400 · SOFT 100 · WONK 1</p>
+      <p class="sg-type-sample" style="font-family: var(--font-display); font-variation-settings: 'opsz' 144, 'wght' 400, 'SOFT' 100, 'WONK' 1; font-size: 4rem; letter-spacing: -0.025em;">Saturn dissects.</p>
+    </div>
+    <div class="sg-type-row">
+      <p class="sg-type-label">SECTION HEADING · opsz 72 · wght 650 · SOFT 30</p>
+      <p class="sg-type-sample" style="font-family: var(--font-display); font-variation-settings: 'opsz' 72, 'wght' 650, 'SOFT' 30; font-size: 1.7rem; letter-spacing: -0.015em;">Most divergent columns</p>
+    </div>
+    <div class="sg-type-row">
+      <p class="sg-type-label">PROSE · 16px / 1.55 · oldstyle nums</p>
+      <p class="sg-type-sample" style="font-family: var(--font-body); font-size: 1rem; line-height: 1.55; max-width: 62ch;">The corpus is dominated by English alt-text from a curated set of 489 high-volume accounts; firehose entries (125,645 rows) are anonymised and lean longer (mean 281 chars vs 202 in curated). Worth a closer look at the +79 chars discrepancy.</p>
+    </div>
+    <div class="sg-type-row">
+      <p class="sg-type-label">DATA / MONO · IBM Plex Mono · tabular nums</p>
+      <p class="sg-type-sample" style="font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1rem;">404,841 rows · skew=+3.62 · null=12.4% · jaccard=0.35</p>
+    </div>
+    <div class="sg-type-row">
+      <p class="sg-type-label">EYEBROW LABEL · IBM Plex Mono · 0.72rem · 0.14em letter-spacing · uppercase</p>
+      <p class="sg-type-sample" style="font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);">FEATURED CHARTS · OPT-IN</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="chips">
+  <h2>04 · Chips &amp; alerts</h2>
+  <p class="sg-lede">Three chip families: kind (neutral monochrome), role (cool blue), alert (info / warn / error with a colored dot). Use sparingly — one or two per surface.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <div class="sg-kit">
+        <span class="chip">numeric</span>
+        <span class="chip">text</span>
+        <span class="chip">categorical</span>
+        <span class="chip">timestamp</span>
+      </div>
+      <div class="sg-kit">
+        <span class="chip chip-role">identifier</span>
+        <span class="chip chip-role">label</span>
+        <span class="chip chip-role">feature</span>
+        <span class="chip chip-role">free_text</span>
+        <span class="chip chip-role">foreign_key</span>
+      </div>
+      <div class="sg-kit">
+        <span class="alert alert-info">multilingual</span>
+        <span class="alert alert-warn">duplicates</span>
+        <span class="alert alert-error">outliers</span>
+        <span class="alert alert-warn">null_rate</span>
+      </div>
+      <div class="sg-kit">
+        <span class="stamp">profile</span>
+        <span class="stamp stamp--insight">reading</span>
+        <span class="stamp stamp--compare">compare</span>
+        <span class="verdict verdict-agree">agree</span>
+        <span class="verdict verdict-partial">partial</span>
+        <span class="verdict verdict-disagree">disagree</span>
+      </div>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;span class="chip"&gt;numeric&lt;/span&gt;
+&lt;span class="chip chip-role"&gt;identifier&lt;/span&gt;
+
+&lt;span class="alert alert-info"&gt;multilingual&lt;/span&gt;
+&lt;span class="alert alert-warn"&gt;duplicates&lt;/span&gt;
+&lt;span class="alert alert-error"&gt;outliers&lt;/span&gt;
+
+&lt;span class="stamp"&gt;profile&lt;/span&gt;
+&lt;span class="stamp stamp--insight"&gt;reading&lt;/span&gt;
+&lt;span class="stamp stamp--compare"&gt;compare&lt;/span&gt;
+
+&lt;span class="verdict verdict-agree"&gt;agree&lt;/span&gt;
+&lt;span class="verdict verdict-partial"&gt;partial&lt;/span&gt;
+&lt;span class="verdict verdict-disagree"&gt;disagree&lt;/span&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="buttons">
+  <h2>05 · Buttons</h2>
+  <p class="sg-lede">Two visual weights. Ink-on-paper for primary actions; ghost (transparent + thin border) for secondary. Hover swaps the fill to the hot accent.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <div class="sg-kit">
+        <button class="btn">Analyze</button>
+        <button class="btn btn-ghost">Open</button>
+        <a class="btn btn-ghost btn-small" href="#">Generate summary</a>
+      </div>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;button class="btn"&gt;Analyze&lt;/button&gt;
+&lt;button class="btn btn-ghost"&gt;Open&lt;/button&gt;
+&lt;a class="btn btn-ghost btn-small" href="#"&gt;Generate summary&lt;/a&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="fields">
+  <h2>06 · Form fields</h2>
+  <p class="sg-lede">Mono-labelled, paper-on-paper inputs. Optional sections collapse into <code>&lt;details&gt;</code> with a + / − marker; useful for keys, advanced controls, anything that's "nice but most users skip".</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <form onsubmit="event.preventDefault(); return false;">
+        <div class="field">
+          <label for="sg-id">Repo id</label>
+          <input type="text" id="sg-id" placeholder="user/dataset" value="">
+        </div>
+        {{ byok_fields("sg", default_provider="anthropic") }}
+        <label class="checkbox" style="margin-top: 0.75rem;">
+          <input type="checkbox"> <span>stats only, skip summary</span>
+        </label>
+        <button class="btn" type="submit" style="margin-top: 0.75rem;">Analyze repo</button>
+      </form>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;div class="field"&gt;
+  &lt;label for="repo"&gt;Repo id&lt;/label&gt;
+  &lt;input type="text" id="repo" placeholder="user/dataset"&gt;
+&lt;/div&gt;
+
+&lt;details class="byok"&gt;
+  &lt;summary&gt;API key (used once, not stored)&lt;/summary&gt;
+  &lt;label for="llm"&gt;Provider&lt;/label&gt;
+  &lt;select id="llm"&gt;...&lt;/select&gt;
+  &lt;label for="key"&gt;API key&lt;/label&gt;
+  &lt;input type="password" id="key" autocomplete="off"&gt;
+&lt;/details&gt;
+
+&lt;label class="checkbox"&gt;
+  &lt;input type="checkbox"&gt;
+  &lt;span&gt;stats only, skip summary&lt;/span&gt;
+&lt;/label&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="cells">
+  <h2>07 · Notebook cells</h2>
+  <p class="sg-lede">Four cell types — markdown, code, output, figure — share a 70px gutter for execution counters. Cells are <code>&lt;article class="cell cell-..."&gt;</code> with <code>.gutter</code> + <code>.cell-body</code>. The Jupyter feeling without the Jupyter weight.</p>
+  <div class="sg-pair">
+    <div class="sg-demo" style="background: var(--paper-raise); padding: 1rem 0.5rem;">
+      <article class="cell cell-md">
+        <div class="gutter"></div>
+        <div class="cell-body">
+          <h3 style="margin: 0;">VizWiz validation</h3>
+          <p style="margin: 0.25rem 0 0 0;">4,319 rows · five columns linking image filename to question and crowd answer.</p>
+        </div>
+      </article>
+      <article class="cell cell-code">
+        <div class="gutter">[1]:</div>
+        <pre class="cell-body" style="margin: 0;">import json; findings = json.load(open('vizwiz.json'))</pre>
+      </article>
+      <article class="cell cell-output">
+        <div class="gutter">Out[1]:</div>
+        <div class="cell-body">
+          <p class="df-caption" style="margin: 0;"><code>findings.meta.row_count</code></p>
+          <div class="df df-narrow"><table><tbody><tr><td>rows</td><td>4,319</td></tr><tr><td>cols</td><td>5</td></tr></tbody></table></div>
+        </div>
+      </article>
+      <article class="cell cell-figure">
+        <div class="gutter">Fig 1.</div>
+        <div class="cell-body">
+          <figure>
+            <div style="height: 80px; background: linear-gradient(90deg, var(--cool) 0%, var(--cool-wash) 100%); border-radius: 2px;"></div>
+            <figcaption><strong>question</strong> · top values reveal heavy repetition of generic prompts.</figcaption>
+          </figure>
+        </div>
+      </article>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;article class="cell cell-md"&gt;
+  &lt;div class="gutter"&gt;&lt;/div&gt;
+  &lt;div class="cell-body"&gt;
+    &lt;h3&gt;VizWiz validation&lt;/h3&gt;
+    &lt;p&gt;4,319 rows · five columns…&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/article&gt;
+
+&lt;article class="cell cell-code"&gt;
+  &lt;div class="gutter"&gt;[1]:&lt;/div&gt;
+  &lt;pre class="cell-body"&gt;&lt;code&gt;import json…&lt;/code&gt;&lt;/pre&gt;
+&lt;/article&gt;
+
+&lt;article class="cell cell-output"&gt;
+  &lt;div class="gutter"&gt;Out[1]:&lt;/div&gt;
+  &lt;div class="cell-body"&gt;…&lt;/div&gt;
+&lt;/article&gt;
+
+&lt;article class="cell cell-figure"&gt;
+  &lt;div class="gutter"&gt;Fig 1.&lt;/div&gt;
+  &lt;div class="cell-body"&gt;
+    &lt;figure&gt;…&lt;figcaption&gt;…&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="cards">
+  <h2>08 · Summary card</h2>
+  <p class="sg-lede">The hero block on every finding. Hot-red left border anchors it; oldstyle-num prose flows up to the 62ch measure; mono cite line beneath. Drop a critiques sub-block when peer-reviewed, an evidence_keys line for citation discipline.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <div class="summary-card">
+        <div class="summary-meta">
+          <span>dataset summary · high confidence</span>
+          <span class="cite">anthropic:claude-opus-4-7</span>
+        </div>
+        <p>This is the VizWiz validation set. The question column is where character lives — only 2,798 unique values with a 35% duplicate rate, dominated by generic prompts like "What is this?" (523 occurrences). Worth a closer look first: the answer_type column is 62% "other", and answers stores serialized Python dicts.</p>
+        <p class="cite">citing: question.duplicate_rate · answer_type.top_rate · answers.top_words</p>
+      </div>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;div class="summary-card"&gt;
+  &lt;div class="summary-meta"&gt;
+    &lt;span&gt;dataset summary · high confidence&lt;/span&gt;
+    &lt;span class="cite"&gt;anthropic:claude-opus-4-7&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;p&gt;…narrative…&lt;/p&gt;
+  &lt;p class="cite"&gt;citing: x · y · z&lt;/p&gt;
+&lt;/div&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="tables">
+  <h2>09 · Tables</h2>
+  <p class="sg-lede">Two table styles: <code>.schema-table</code> for sortable column listings (mono, hairlines between rows, no zebra), <code>.df</code> for output-cell dataframes (mono, sticky header, narrow variant for thin sidecars). Tabular-nums everywhere.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <table class="schema-table">
+        <caption class="visually-hidden">Sample schema table</caption>
+        <thead>
+          <tr><th scope="col">Column</th><th scope="col">Kind</th><th scope="col" class="num">Null %</th><th scope="col" class="num">Unique</th><th scope="col">Alerts</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="col-name">image</td><td>text</td><td class="num">0.0%</td><td class="num">4,319</td><td><span class="alert alert-info">multilingual</span></td></tr>
+          <tr><td class="col-name">question</td><td>text</td><td class="num">0.0%</td><td class="num">2,798</td><td><span class="alert alert-warn">duplicates</span></td></tr>
+          <tr><td class="col-name">answer_type</td><td>categorical</td><td class="num">0.0%</td><td class="num">5</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;table class="schema-table"&gt;
+  &lt;caption class="visually-hidden"&gt;…&lt;/caption&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;&lt;th scope="col"&gt;Column&lt;/th&gt;…&lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td class="col-name"&gt;image&lt;/td&gt;
+      &lt;td&gt;text&lt;/td&gt;
+      &lt;td class="num"&gt;0.0%&lt;/td&gt;
+      …
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="dropzone">
+  <h2>10 · Drop zone</h2>
+  <p class="sg-lede">A keyboard-accessible <code>&lt;label&gt;</code> wraps the hidden <code>&lt;input type="file"&gt;</code>. Progressive enhancement adds drag-and-drop via a tiny vanilla-JS module. Never JavaScript-required.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <label class="dropzone" tabindex="0" style="min-height: 180px;">
+        <span class="subcallout">drop · or · browse</span>
+        <span class="callout">XLSX · CSV · Parquet · SQLite · …</span>
+        <span class="filename" aria-live="polite"></span>
+      </label>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;label class="dropzone" tabindex="0"&gt;
+  &lt;span class="subcallout"&gt;drop · or · browse&lt;/span&gt;
+  &lt;span class="callout"&gt;XLSX · CSV · …&lt;/span&gt;
+  &lt;span class="filename" aria-live="polite"&gt;&lt;/span&gt;
+  &lt;input type="file" name="file" accept=".csv,.parquet,…"&gt;
+&lt;/label&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="footer">
+  <h2>11 · Reproducibility footer</h2>
+  <p class="sg-lede">A definition list at the foot of every notebook. Mono labels, mono values, single 2-column grid. Holds version + prompt-version + token count + raw JSON link. Fits at the end of any "this is how you'd repeat the run" page.</p>
+  <div class="sg-pair">
+    <div class="sg-demo">
+      <footer class="nb-foot" style="margin: 0; border-top: 2px solid var(--ink); padding-top: 1.5rem;">
+        <dl>
+          <dt>saturn</dt><dd>v0.2.0</dd>
+          <dt>mode</dt><dd>full</dd>
+          <dt>seed</dt><dd>42</dd>
+          <dt>generated</dt><dd>2026-05-01T11:20:46+00:00</dd>
+          <dt>insight models</dt><dd>anthropic:claude-opus-4-7</dd>
+          <dt>prompt version</dt><dd>saturn-insight-v2</dd>
+          <dt>tokens</dt><dd>9,811</dd>
+          <dt>raw JSON</dt><dd><a href="#">findings.json</a></dd>
+        </dl>
+      </footer>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>&lt;footer class="nb-foot"&gt;
+  &lt;dl&gt;
+    &lt;dt&gt;saturn&lt;/dt&gt;&lt;dd&gt;v0.2.0&lt;/dd&gt;
+    &lt;dt&gt;mode&lt;/dt&gt;&lt;dd&gt;full&lt;/dd&gt;
+    &lt;dt&gt;seed&lt;/dt&gt;&lt;dd&gt;42&lt;/dd&gt;
+    &lt;dt&gt;generated&lt;/dt&gt;&lt;dd&gt;…&lt;/dd&gt;
+    &lt;dt&gt;insight models&lt;/dt&gt;&lt;dd&gt;…&lt;/dd&gt;
+    &lt;dt&gt;prompt version&lt;/dt&gt;&lt;dd&gt;saturn-insight-v2&lt;/dd&gt;
+    &lt;dt&gt;tokens&lt;/dt&gt;&lt;dd&gt;9,811&lt;/dd&gt;
+    &lt;dt&gt;raw JSON&lt;/dt&gt;&lt;dd&gt;&lt;a href="…"&gt;findings.json&lt;/a&gt;&lt;/dd&gt;
+  &lt;/dl&gt;
+&lt;/footer&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section">
+  <h2>Principles</h2>
+  <ul style="font-size: var(--size-body); line-height: 1.7; max-width: var(--measure);">
+    <li><strong>Warm paper, dark ink, one accent.</strong> Bone white background instead of pure white; near-black ink instead of black; one signal red used sparingly. The hot color is the only thing that asks for attention.</li>
+    <li><strong>Variable serif for prose, mono for data.</strong> Fraunces gets exposed across opsz/wght/SOFT/WONK so the same family handles 4rem display headlines and 1rem reading prose. Tabular-nums on every number that lives in a column.</li>
+    <li><strong>Hairlines, never zebra.</strong> 1px rules at 14% opacity beat alternating row shading. A grid you can read straight through.</li>
+    <li><strong>Eyebrow labels everywhere.</strong> Tiny mono labels in 0.14em letter-spacing-uppercase do the work of headings without taking the column's air.</li>
+    <li><strong>Cells &gt; cards.</strong> The notebook gutter (<code>[1]:</code> / <code>Out[1]:</code> / <code>Fig 1.</code>) is information dense and reads like real research output.</li>
+    <li><strong>Progressive enhancement first.</strong> JS adds drag-and-drop and table sorting, nothing more. The page works without it.</li>
+    <li><strong>WCAG 2.2 AA throughout.</strong> Skip-link, single h1, table captions, focus-visible outlines, <code>prefers-reduced-motion</code>, dark mode via <code>prefers-color-scheme</code>.</li>
+  </ul>
+</section>
+
+</div>
+
+{% endblock %}

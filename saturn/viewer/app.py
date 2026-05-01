@@ -256,6 +256,10 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         resp.headers["Content-Disposition"] = f'attachment; filename="{id}.ipynb"'
         return resp
 
+    @app.get("/styleguide")
+    def styleguide():
+        return render_template("styleguide.html.j2")
+
     @app.get("/health")
     def health():
         return {
