@@ -23,12 +23,26 @@
       <input type="file" name="file" id="file-input"
              accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet,.feather,.arrow,.xlsx,.xls,.xlsb,.ods,.db,.sqlite,.sqlite3">
     </label>
+    <details class="field byok">
+      <summary>Plain-language summary (optional)</summary>
+      <p class="hint">Saturn can call a language model to add a plain-language reading. Paste your own API key to power that call — it's used once for this run and never stored.</p>
+      <label for="upload-llm">Provider</label>
+      <select id="upload-llm" name="llm">
+        <option value="anthropic">anthropic</option>
+        <option value="openai">openai</option>
+        <option value="groq">groq</option>
+        <option value="gemini">gemini</option>
+        <option value="mistral">mistral</option>
+      </select>
+      <label for="upload-key">API key</label>
+      <input type="password" id="upload-key" name="api_key" autocomplete="off" placeholder="sk-…">
+    </details>
     <label class="checkbox">
-      <input type="checkbox" name="no_llm" value="1">
+      <input type="checkbox" name="no_llm" value="1" checked>
       <span>stats only, skip summary</span>
     </label>
     <button class="btn" type="submit">Analyze upload</button>
-    <p class="hint">50 MB max. For bigger corpora use the CLI: <code>saturn analyze path/to/file</code>.</p>
+    <p class="hint">50 MB max. Public uploads default to stats-only — uncheck and supply your key to add a summary.</p>
   </form>
 
   <form class="input-card" action="{{ url_for('analyze_hf_route') }}" method="post">
@@ -38,8 +52,21 @@
       <label for="hf-repo">Repo id</label>
       <input type="text" id="hf-repo" name="repo" placeholder="user/dataset" required pattern="[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+">
     </div>
+    <details class="field byok">
+      <summary>Plain-language summary (optional)</summary>
+      <label for="hf-llm">Provider</label>
+      <select id="hf-llm" name="llm">
+        <option value="anthropic">anthropic</option>
+        <option value="openai">openai</option>
+        <option value="groq">groq</option>
+        <option value="gemini">gemini</option>
+        <option value="mistral">mistral</option>
+      </select>
+      <label for="hf-key">API key</label>
+      <input type="password" id="hf-key" name="api_key" autocomplete="off" placeholder="sk-…">
+    </details>
     <label class="checkbox">
-      <input type="checkbox" name="no_llm" value="1">
+      <input type="checkbox" name="no_llm" value="1" checked>
       <span>stats only, skip summary</span>
     </label>
     <button class="btn" type="submit">Analyze repo</button>
@@ -77,10 +104,7 @@
             <p class="preview">{{ first_insight.narrative }}</p>
           {% else %}
             <p class="preview" style="color: var(--muted);">
-              No plain-language summary yet.
-              <form action="{{ url_for('backfill', id=d.id) }}" method="post" style="display: inline; margin-left: 0.5rem;">
-                <button class="btn btn-ghost btn-small" type="submit">Generate summary</button>
-              </form>
+              No plain-language summary yet — open the reading to generate one with your own API key.
             </p>
           {% endif %}
         </div>
