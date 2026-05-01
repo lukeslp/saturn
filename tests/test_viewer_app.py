@@ -310,3 +310,46 @@ def test_filter_js_progressive_enhancement(client):
     assert 'class="readings-pager"' in body
     # readings-empty also starts hidden
     assert 'id="readings-empty"' in body
+
+
+def test_index_renders_collections_when_3_or_more_match_a_prefix(tmp_path):
+    """Collections derived from slug prefixes; require ≥3 entries to surface."""
+    import json
+
+    base = {
+        "saturn_version": "0.2.0",
+        "meta": {"source": "s", "row_count": 1, "sampled_rows": 1, "seed": 0,
+                 "mode": "full", "generated_at": "2026-05-01T00:00:00+00:00"},
+        "schema": {"a": "numeric"}, "language_counts": {}, "notes": [],
+        "columns": [],
+    }
+    for name in ["accessibility-one", "accessibility-two", "accessibility-three", "lonely-one"]:
+        (tmp_path / f"{name}.json").write_text(json.dumps(base))
+
+    app = create_app(findings_dir=tmp_path, testing=True)
+    body = app.test_client().get("/").get_data(as_text=True)
+    # Collection chip surfaces (>=3 entries)
+    assert 'data-collection="accessibility"' in body
+    # 'lonely' has only 1 → no chip
+    assert 'data-collection="lonely"' not in body
+    # The chip count badge shows the right number
+    assert ">3<" in body or "> 3<" in body
+
+
+def test_index_omits_collections_rail_when_no_prefix_passes_threshold(tmp_path):
+    """Single-prefix-pair set produces no collections rail."""
+    import json
+
+    base = {
+        "saturn_version": "0.2.0",
+        "meta": {"source": "s", "row_count": 1, "sampled_rows": 1, "seed": 0,
+                 "mode": "full", "generated_at": "2026-05-01T00:00:00+00:00"},
+        "schema": {}, "language_counts": {}, "notes": [], "columns": [],
+    }
+    for name in ["alpha-one", "beta-one"]:
+        (tmp_path / f"{name}.json").write_text(json.dumps(base))
+
+    app = create_app(findings_dir=tmp_path, testing=True)
+    body = app.test_client().get("/").get_data(as_text=True)
+    # No collection chips emitted (each prefix has only 1 entry, < 3 threshold)
+    assert "readings-collections" not in body

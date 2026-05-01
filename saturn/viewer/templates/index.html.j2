@@ -81,6 +81,31 @@
   </header>
 
   {% if docs %}
+  {# Auto-derive collections from slug prefix. Only show prefixes that appear
+     ≥3 times — fewer than that and the chip is noise rather than navigation. #}
+  {% set _collections = {} %}
+  {% for d in docs %}
+    {% set parts = d.id.split('-') %}
+    {% set prefix = parts[0] if parts else '' %}
+    {% if prefix and prefix.replace('_', '').isalpha() %}
+      {% if _collections.update({prefix: _collections.get(prefix, 0) + 1}) %}{% endif %}
+    {% endif %}
+  {% endfor %}
+  {% set _ranked = (_collections.items() | list | sort(attribute=1, reverse=true)) %}
+  {% set _shown = _ranked | selectattr(1, 'ge', 3) | list %}
+
+  {% if _shown %}
+  <nav class="readings-collections" aria-label="Browse by collection">
+    <span class="collections-label">collections</span>
+    {% for prefix, count in _shown[:12] %}
+      <button type="button" class="collection-chip" data-collection="{{ prefix }}">
+        {{ prefix.replace('_', ' ') }}
+        <span class="muted" style="font-variant-numeric: tabular-nums;">{{ count }}</span>
+      </button>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
   <div class="readings-controls" role="search" aria-label="Filter readings">
     <label class="visually-hidden" for="readings-filter">Filter by name or source</label>
     <input type="search"

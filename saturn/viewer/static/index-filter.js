@@ -95,6 +95,30 @@
     state.page += 1; apply(); window.scrollTo({ top: list.offsetTop - 40 });
   });
 
+  // Collection chips fill the filter with their prefix — quick way to
+  // narrow 200 findings down to a topic.
+  document.querySelectorAll('.collection-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const prefix = chip.dataset.collection || '';
+      filterInput.value = prefix;
+      state.query = prefix;
+      state.page = 0;
+      // Highlight the active chip
+      document.querySelectorAll('.collection-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      apply();
+      filterInput.focus();
+      window.scrollTo({ top: list.offsetTop - 40 });
+    });
+  });
+
+  // Clearing the filter input also clears the active-chip highlight
+  filterInput.addEventListener('input', () => {
+    if (!filterInput.value) {
+      document.querySelectorAll('.collection-chip').forEach((c) => c.classList.remove('active'));
+    }
+  });
+
   // Keyboard: '/' focuses the filter, Esc clears
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && document.activeElement !== filterInput) {

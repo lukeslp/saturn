@@ -1620,3 +1620,53 @@ a:focus-visible {
 }
 .chart-fallback td:nth-child(n+2) { text-align: right; }
 .chart-fallback table { display: block; max-height: 320px; overflow-y: auto; }
+
+/* Collections rail above the search filter */
+.readings-collections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 1);
+  align-items: center;
+  margin: calc(var(--step) * 2) 0 calc(var(--step) * 2.5) 0;
+  padding-bottom: calc(var(--step) * 2);
+  border-bottom: 1px dashed var(--rule);
+}
+.readings-collections .collections-label {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: calc(var(--step) * 1.5);
+}
+.collection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 4px 10px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.collection-chip:hover {
+  background: var(--hot-wash);
+  border-color: var(--hot);
+  color: var(--hot);
+}
+.collection-chip:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: 2px;
+}
+.collection-chip.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.collection-chip.active .muted { color: var(--paper); opacity: 0.7; }
