@@ -186,13 +186,39 @@ subprocess.run([
     </article>
   {% endfor %}
 
+  {% set year = doc.raw.generated_at[:4] if doc.raw.generated_at else '' %}
+  {% set prompt_version = 'saturn-insight-v2' if insights.providers else '' %}
+  {% set models = insights.providers | join(', ') if insights.providers else '' %}
+  {% set view_url = (request.url_root.rstrip('/') ~ url_for('view', id=doc.id)) if request else url_for('view', id=doc.id) %}
+  <section class="cite-block" aria-labelledby="cite-heading-cmp">
+    <h2 id="cite-heading-cmp">How to cite</h2>
+    <p class="muted" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase;">click to copy</p>
+
+    <div class="cite-pair">
+      <div>
+        <div class="cite-label">BibTeX</div>
+        <pre class="cite-text" data-copy>{%- raw %}@misc{{% endraw %}saturn-{{ doc.id | replace('_', '-') }}-{{ year }},
+  author       = {Steuber, Luke},
+  title        = {Saturn compare: {{ doc.a_label }} vs {{ doc.b_label }}},
+  year         = {{- '{' }}{{ year }}{{- '}' }},
+  howpublished = {\url{{ '{' }}{{ view_url }}{{ '}' }}},
+  note         = {Profiled with saturn-dissect v{{ doc.raw.saturn_version or '0.2.0' }}{% if prompt_version %}, prompt {{ prompt_version }}, model {{ models }}{% endif %}},
+}</pre>
+      </div>
+      <div>
+        <div class="cite-label">APA</div>
+        <pre class="cite-text" data-copy>Steuber, L. ({{ year }}). Saturn compare: {{ doc.a_label }} vs {{ doc.b_label }}. Profiled with saturn-dissect v{{ doc.raw.saturn_version or '0.2.0' }}{% if prompt_version %} ({{ prompt_version }}, {{ models }}){% endif %}. Retrieved from {{ view_url }}</pre>
+      </div>
+    </div>
+  </section>
+
   <footer class="nb-foot" aria-label="Reproducibility metadata">
     <dl>
       <dt>saturn</dt><dd>v{{ doc.raw.saturn_version or '?' }}</dd>
       <dt>generated</dt><dd>{{ doc.raw.generated_at }}</dd>
       {% if insights.providers %}
         <dt>insight models</dt><dd>{{ insights.providers | join(', ') }}</dd>
-        <dt>prompt version</dt><dd>saturn-insight-v1</dd>
+        <dt>prompt version</dt><dd>{{ prompt_version }}</dd>
       {% endif %}
       <dt>raw JSON</dt><dd><a href="{{ url_for('api_findings', id=doc.id) }}">findings.json</a></dd>
       <dt>notebook</dt><dd><a href="{{ url_for('view_ipynb', id=doc.id) }}" download>{{ doc.id }}.ipynb</a> &middot; download to keep exploring in JupyterLab</dd>
@@ -201,4 +227,7 @@ subprocess.run([
 
 </section>
 
+{% endblock %}
+{% block foot_extra %}
+<script src="{{ url_for('static', filename='copy-cite.js') }}" defer></script>
 {% endblock %}

@@ -197,7 +197,8 @@ def test_notebook_renders_reproduction_code_cell(client):
 def test_notebook_renders_reproducibility_footer(client):
     resp = client.get("/view/demo?view=notebook")
     body = resp.get_data(as_text=True)
-    assert "saturn-insight-v1" in body
+    # Prompt version was bumped to v2 when we added role/treatment/featured_charts.
+    assert "saturn-insight-v2" in body
     assert "v0.2.0" in body
     # tokens stat
     assert "1,300" in body or "1300" in body
@@ -266,3 +267,43 @@ def test_notebook_figures_wrap_in_figure_tags(client):
     figures = re.findall(r"<figure\b.*?</figure>", body, re.DOTALL)
     for fig in figures:
         assert "<figcaption" in fig
+
+
+# ---------- citation block --------------------------------------------------
+
+
+def test_notebook_renders_bibtex_citation(client):
+    resp = client.get("/view/demo?view=notebook")
+    body = resp.get_data(as_text=True)
+    assert "How to cite" in body
+    assert "BibTeX" in body
+    assert "@misc{saturn-demo-2026" in body
+    # The view URL gets stamped into the citation
+    assert "url_for('view', id='demo')" not in body  # template should have rendered it
+    # Should include saturn version + prompt version
+    assert "saturn-dissect" in body
+    assert "saturn-insight-v2" in body
+
+
+def test_notebook_renders_apa_citation(client):
+    resp = client.get("/view/demo?view=notebook")
+    body = resp.get_data(as_text=True)
+    assert "APA" in body
+    assert "Steuber, L." in body
+    assert "Saturn reading: demo" in body
+
+
+def test_notebook_citation_marked_as_copyable(client):
+    resp = client.get("/view/demo?view=notebook")
+    body = resp.get_data(as_text=True)
+    # Both citation blocks have data-copy so the JS picks them up
+    assert body.count("data-copy") == 2
+    # The copy script is loaded
+    assert "copy-cite.js" in body
+
+
+def test_compare_notebook_renders_compare_citation(client):
+    resp = client.get("/view/diff?view=notebook")
+    body = resp.get_data(as_text=True)
+    assert "Saturn compare: curated vs firehose" in body
+    assert "@misc{saturn-diff-" in body

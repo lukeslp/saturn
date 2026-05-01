@@ -284,6 +284,33 @@ subprocess.run([
   {% endfor %}
 
   {# ---- Reproducibility footer ---- #}
+  {% set year = doc.meta.generated_at[:4] if doc.meta.generated_at else '' %}
+  {% set prompt_version = 'saturn-insight-v2' if insights.providers else '' %}
+  {% set models = insights.providers | join(', ') if insights.providers else '' %}
+  {% set view_url = (request.url_root.rstrip('/') ~ url_for('view', id=doc.id)) if request else url_for('view', id=doc.id) %}
+  <section class="cite-block" aria-labelledby="cite-heading">
+    <h2 id="cite-heading">How to cite</h2>
+    <p class="muted" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.1em; text-transform: uppercase;">click to copy</p>
+
+    <div class="cite-pair">
+      <div>
+        <div class="cite-label">BibTeX</div>
+        <pre class="cite-text" data-copy>{# format below uses concatenation to dodge the trailing-newline trim #}
+{%- raw %}@misc{{% endraw %}saturn-{{ doc.id | replace('_', '-') }}-{{ year }},
+  author       = {Steuber, Luke},
+  title        = {Saturn reading: {{ doc.id.replace('-', ' ').replace('_', ' ') }}},
+  year         = {{- '{' }}{{ year }}{{- '}' }},
+  howpublished = {\url{{ '{' }}{{ view_url }}{{ '}' }}},
+  note         = {Profiled with saturn-dissect v{{ doc.raw.saturn_version or '0.2.0' }}{% if prompt_version %}, prompt {{ prompt_version }}, model {{ models }}{% endif %}},
+}</pre>
+      </div>
+      <div>
+        <div class="cite-label">APA</div>
+        <pre class="cite-text" data-copy>Steuber, L. ({{ year }}). Saturn reading: {{ doc.id.replace('-', ' ').replace('_', ' ') }}. {% if doc.meta.source %}Source: {{ doc.meta.source }}. {% endif %}Profiled with saturn-dissect v{{ doc.raw.saturn_version or '0.2.0' }}{% if prompt_version %} ({{ prompt_version }}, {{ models }}){% endif %}. Retrieved from {{ view_url }}</pre>
+      </div>
+    </div>
+  </section>
+
   <footer class="nb-foot" aria-label="Reproducibility metadata">
     <dl>
       <dt>saturn</dt><dd>v{{ doc.raw.saturn_version or '?' }}</dd>
@@ -292,7 +319,7 @@ subprocess.run([
       <dt>generated</dt><dd>{{ doc.meta.generated_at }}</dd>
       {% if insights.providers %}
         <dt>insight models</dt><dd>{{ insights.providers | join(', ') }}</dd>
-        <dt>prompt version</dt><dd>saturn-insight-v1</dd>
+        <dt>prompt version</dt><dd>{{ prompt_version }}</dd>
         {% if insights.total_usage %}
           <dt>tokens</dt><dd>{{ "{:,}".format(insights.total_usage.get('total_tokens', insights.total_usage.get('input_tokens', 0) + insights.total_usage.get('output_tokens', 0))) }}</dd>
         {% endif %}
@@ -304,4 +331,7 @@ subprocess.run([
 
 </section>
 
+{% endblock %}
+{% block foot_extra %}
+<script src="{{ url_for('static', filename='copy-cite.js') }}" defer></script>
 {% endblock %}

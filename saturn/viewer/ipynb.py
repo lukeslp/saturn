@@ -176,7 +176,7 @@ def _profile_to_ipynb(doc) -> dict[str, Any]:
     if insights.get("providers"):
         footer_lines += [
             f"- insight models: {', '.join(insights['providers'])}",
-            "- prompt version: saturn-insight-v1",
+            "- prompt version: saturn-insight-v2",
         ]
         usage = insights.get("total_usage", {})
         total_tokens = usage.get("total_tokens", usage.get("input_tokens", 0) + usage.get("output_tokens", 0))

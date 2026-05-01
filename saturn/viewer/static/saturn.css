@@ -1505,3 +1505,70 @@ a:focus-visible {
   border-color: var(--cool-wash);
   color: var(--cool);
 }
+
+/* Citation block */
+.cite-block {
+  margin: calc(var(--step) * 5) 0 calc(var(--step) * 3) 0;
+  padding-top: calc(var(--step) * 3);
+  border-top: 1px solid var(--rule);
+}
+.cite-block h2 {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "wght" 600, "SOFT" 30;
+  font-size: var(--size-h2);
+  margin: 0 0 calc(var(--step) * 0.5) 0;
+  letter-spacing: -0.015em;
+}
+.cite-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--step) * 3);
+  margin-top: calc(var(--step) * 2);
+}
+@media (max-width: 720px) { .cite-pair { grid-template-columns: 1fr; } }
+.cite-label {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: calc(var(--step) * 1);
+}
+.cite-text {
+  background: var(--paper-raise);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: calc(var(--step) * 1.75);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background 120ms ease-out;
+  margin: 0;
+  position: relative;
+}
+.cite-text:hover {
+  border-color: var(--hot);
+  background: var(--hot-wash);
+}
+.cite-text:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: 2px;
+}
+.cite-text.copied::after {
+  content: "copied";
+  position: absolute;
+  top: calc(var(--step) * 1);
+  right: calc(var(--step) * 1);
+  background: var(--good);
+  color: var(--paper);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  animation: fadeOut 1.2s ease-out forwards;
+}
+@keyframes fadeOut { from { opacity: 1; } 60% { opacity: 1; } to { opacity: 0; } }

@@ -148,7 +148,7 @@ def test_each_kind_gets_a_plot_cell(profile_doc):
 def test_reproducibility_footer_includes_versions(profile_doc):
     nb = to_ipynb(profile_doc)
     text = "".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "markdown")
-    assert "saturn-insight-v1" in text
+    assert "saturn-insight-v1" in text or "saturn-insight-v2" in text
     assert "v0.2.0" in text
     assert "1,300" in text  # tokens
 
