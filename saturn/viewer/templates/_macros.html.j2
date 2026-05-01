@@ -1,6 +1,6 @@
 {# Render a chart-fallback table inside a <details> block so screen-reader
    users get the same numbers as a sighted Plotly viewer. The macro is a
-   no-op when `data` is None — every figure that can produce one will. #}
+   no-op when `data` is None; every figure that can produce one will. #}
 {% macro chart_fallback(data) %}
   {% if data %}
   <details class="chart-fallback">
@@ -21,7 +21,7 @@
 
 {# When a previous insight pass failed, surface the reason in plain language
    so the researcher knows whether to retry or supply their own key. The
-   provider's raw error message is *not* shown — we redact to a stable type
+   provider's raw error message is *not* shown; we redact to a stable type
    plus a short human-readable hint. No-op when there are no errors. #}
 {% macro insight_error_hint(insights) %}
   {% set errors = (insights or {}).get('errors') or [] %}
@@ -30,13 +30,13 @@
     {% set msg = (last.get('message') or '') | string %}
     {% set lower = msg.lower() %}
     {% if 'credit balance' in lower or 'credit_balance' in lower %}
-      {% set hint = "The server's account is out of credits. Paste your own API key below to keep going — it's used once and never stored." %}
+      {% set hint = "The server's account is out of credits. Paste your own API key below to keep going; it's used once and never stored." %}
     {% elif 'rate limit' in lower or '429' in lower %}
       {% set hint = "The provider rate-limited the last attempt. Wait a minute and retry, or paste your own key for a fresh quota." %}
     {% elif 'authentication' in lower or 'invalid api key' in lower or 'unauthorized' in lower %}
       {% set hint = "The provider rejected the key on the last attempt. Try a different provider or paste your own key below." %}
     {% elif 'timeout' in lower or 'timed out' in lower %}
-      {% set hint = "The provider timed out on the last attempt. Try again — usually transient." %}
+      {% set hint = "The provider timed out on the last attempt. Try again; usually transient." %}
     {% else %}
       {% set hint = "The previous attempt failed (" ~ (last.get('type') or 'unknown error') ~ "). Try again or pick a different provider." %}
     {% endif %}
@@ -57,7 +57,7 @@
    server. Leave the API key field empty to use the default localhost
    endpoint, paste a bearer token for hosted Ollama-compatible endpoints
    (e.g., api.assisted.space). On the public viewer, ollama only works
-   if the *server* exposes one — local-to-the-user ollama is reachable
+   if the *server* exposes one; local-to-the-user ollama is reachable
    only when saturn itself runs on the user's box. #}
 {% macro byok_fields(prefix, default_provider="anthropic", compact=False) %}
   <details class="field byok"{% if not compact %} open{% endif %}>

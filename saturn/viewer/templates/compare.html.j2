@@ -1,6 +1,6 @@
 {% extends "base.html.j2" %}
 {% from "_macros.html.j2" import byok_fields, insight_error_hint %}
-{% block title %}{{ doc.a_label }} vs {{ doc.b_label }} — saturn{% endblock %}
+{% block title %}{{ doc.a_label }} vs {{ doc.b_label }} · saturn{% endblock %}
 {% block main %}
 
 {% set insights = doc.raw.get('insights', {}) %}

@@ -67,7 +67,7 @@ Then refresh the viewer in the browser. No restart needed. The index sorts newes
 
 ### 4. Caddy route (needs `@geepers_caddy`)
 
-Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Two directives — a redirect for bare `/saturn` and the path-stripped reverse proxy for everything under it:
+Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Two directives: a redirect for bare `/saturn` and the path-stripped reverse proxy for everything under it:
 
 ```caddyfile
 redir /saturn /saturn/ 308
@@ -81,7 +81,7 @@ handle_path /saturn/* {
 
 The `redir` is load-bearing: `handle_path /saturn/*` does not match the bare `/saturn` URL, which otherwise falls through to whatever static file_server is behind it. The `header_up` is also load-bearing: without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (scripts/start.sh sets it on the sm-managed deployment), so a direct-to-gunicorn caller cannot spoof a prefix.
 
-Apply via `@geepers_caddy` (sole authority — do not hand-edit). Then:
+Apply via `@geepers_caddy` (sole authority; do not hand-edit). Then:
 
 ```bash
 sudo caddy validate --config /etc/caddy/Caddyfile
@@ -93,7 +93,7 @@ Expected: `{"findings_dir":"/home/coolhand/saturn-findings","status":"ok"}`.
 
 ## Security posture
 
-- **Read-only.** No POST/PUT/DELETE routes. No auth intentionally — findings are treated like other public `~/html/` content.
+- **Read-only.** No POST/PUT/DELETE routes. No auth intentionally; findings are treated like other public `~/html/` content.
 - **Path-traversal guard.** `_safe_findings_path` in `saturn/viewer/app.py` resolves every `<id>` against the configured findings dir and 404s anything that escapes. Belt and suspenders; Flask's default string converter already forbids `/`.
 - **No PII by design.** saturn's findings are aggregates (counts, rates, alerts, top values, language mix). Still: treat the findings dir like any public directory. Don't drop findings from a dataset you can't share. `top_values` on a free-text column can surface snippets of actual content.
 - **Rate limiting.** Not configured in-app. If traffic ever matters, add Caddy's `rate_limit` plugin at the path.

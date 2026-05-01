@@ -1,6 +1,6 @@
 {% extends "base.html.j2" %}
 {% from "_macros.html.j2" import byok_fields, chart_fallback, insight_error_hint %}
-{% block title %}{{ doc.id }} — saturn{% endblock %}
+{% block title %}{{ doc.id }} · saturn{% endblock %}
 {% block main %}
 
 {% set insights = doc.raw.get('insights', {}) %}
@@ -63,7 +63,7 @@
   {% else %}
     <div class="missing">
       {{ insight_error_hint(insights) }}
-      <p>No plain-language summary on this reading yet. A language model can turn saturn's measurements into prose — it never sees raw rows, only per-column aggregates already in the findings JSON.</p>
+      <p>No plain-language summary on this reading yet. A language model can turn saturn's measurements into prose; it never sees raw rows, only per-column aggregates already in the findings JSON.</p>
       <form action="{{ url_for('backfill', id=doc.id) }}" method="post">
         {{ byok_fields("profile-bf", default_provider=default_llm) }}
         <button class="btn" type="submit" style="margin-top: 0.75rem;">Generate summary</button>
@@ -71,7 +71,7 @@
     </div>
   {% endif %}
 
-  {# featured charts the model picked — only the ones we actually rendered #}
+  {# featured charts the model picked: only the ones we actually rendered #}
   {% if dataset_insight and dataset_insight.get('featured_charts') and charts %}
     <section class="featured-rail" aria-labelledby="featured-heading">
       <h3 id="featured-heading">Charts the summary said to look at first</h3>

@@ -1,6 +1,6 @@
 {% extends "base.html.j2" %}
 {% from "_macros.html.j2" import byok_fields %}
-{% block title %}saturn — dataset readings{% endblock %}
+{% block title %}saturn · dataset readings{% endblock %}
 {% block main %}
 
 <section class="hero">
@@ -24,7 +24,7 @@
       <input type="file" name="file" id="file-input"
              accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet,.feather,.arrow,.xlsx,.xls,.xlsb,.ods,.db,.sqlite,.sqlite3">
     </label>
-    <p class="hint" style="margin-bottom: 0.25rem;">By default this demo runs Opus on the server's account. Paste your own API key below to use a different provider — it's used once for this run and never stored. Pick "ollama (local)" to call a self-hosted model (only reachable when saturn runs on your own machine).</p>
+    <p class="hint" style="margin-bottom: 0.25rem;">By default this demo runs Opus on the server's account. Paste your own API key below to use a different provider; it's used once for this run and never stored. Pick "ollama (local)" to call a self-hosted model (only reachable when saturn runs on your own machine).</p>
     {{ byok_fields("upload", default_provider=default_llm, compact=True) }}
     <label class="checkbox">
       <input type="checkbox" name="no_llm" value="1">
@@ -47,7 +47,7 @@
       <span>stats only, skip summary</span>
     </label>
     <button class="btn" type="submit">Analyze repo</button>
-    <p class="hint">Loads every split, concatenated. Big repos may take minutes — you'll get a job page to watch.</p>
+    <p class="hint">Loads every split, concatenated. Big repos may take minutes; you'll get a job page to watch.</p>
   </form>
 </section>
 
@@ -59,7 +59,7 @@
 
   {% if docs %}
   {# Auto-derive collections from slug prefix. Only show prefixes that appear
-     ≥3 times — fewer than that and the chip is noise rather than navigation. #}
+     ≥3 times; fewer than that and the chip is noise rather than navigation. #}
   {% set _collections = {} %}
   {% for d in docs %}
     {% set parts = d.id.split('-') %}
@@ -145,7 +145,7 @@
             <p class="preview">{{ first_insight.narrative }}</p>
           {% else %}
             <p class="preview" style="color: var(--muted);">
-              No plain-language summary yet — open the reading to generate one.
+              No plain-language summary yet. Open the reading to generate one.
             </p>
           {% endif %}
         </div>

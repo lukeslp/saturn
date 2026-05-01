@@ -1,9 +1,9 @@
 {% extends "base.html.j2" %}
 {% from "_macros.html.j2" import byok_fields %}
-{% block title %}Saturn — Datasheet Annual style guide{% endblock %}
+{% block title %}Saturn · Datasheet Annual style guide{% endblock %}
 {% block head_extra %}
 <style>
-  /* Style guide chrome — keeps the demo content honest by living next to its source */
+  /* Style guide chrome: keeps the demo content honest by living next to its source */
   .sg-section { margin: calc(var(--step) * 6) 0; padding-top: calc(var(--step) * 3); border-top: 1px solid var(--rule); }
   .sg-section:first-of-type { border-top: 0; }
   .sg-section h2 { font-family: var(--font-display); font-variation-settings: "opsz" 144, "wght" 600, "SOFT" 30; font-size: var(--size-h2); margin: 0 0 calc(var(--step) * 1) 0; letter-spacing: -0.015em; }
@@ -48,7 +48,7 @@
 
 <header class="sg-hero">
   <p class="eyebrow" style="font-family: var(--font-mono); font-size: var(--size-eyebrow); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hot); margin: 0 0 1rem 0;">design system · v1.0</p>
-  <h1>Saturn — <em>Datasheet Annual</em></h1>
+  <h1>Saturn <em>Datasheet Annual</em></h1>
   <p class="lede">A warm-paper, ink-and-signal-red type system for tools that read like a research notebook. Fraunces variable serif for the prose; IBM Plex Mono for the data; one accent color used sparingly. Every component lives next to its source markup so you can lift what you need.</p>
 </header>
 
@@ -151,7 +151,7 @@
 <!-- ============================================================ -->
 <section class="sg-section" id="chips">
   <h2>04 · Chips &amp; alerts</h2>
-  <p class="sg-lede">Three chip families: kind (neutral monochrome), role (cool blue), alert (info / warn / error with a colored dot). Use sparingly — one or two per surface.</p>
+  <p class="sg-lede">Three chip families: kind (neutral monochrome), role (cool blue), alert (info / warn / error with a colored dot). Use sparingly: one or two per surface.</p>
   <div class="sg-pair">
     <div class="sg-demo">
       <div class="sg-kit">
@@ -269,7 +269,7 @@
 <!-- ============================================================ -->
 <section class="sg-section" id="cells">
   <h2>07 · Notebook cells</h2>
-  <p class="sg-lede">Four cell types — markdown, code, output, figure — share a 70px gutter for execution counters. Cells are <code>&lt;article class="cell cell-..."&gt;</code> with <code>.gutter</code> + <code>.cell-body</code>. The Jupyter feeling without the Jupyter weight.</p>
+  <p class="sg-lede">Four cell types (markdown, code, output, figure) share a 70px gutter for execution counters. Cells are <code>&lt;article class="cell cell-..."&gt;</code> with <code>.gutter</code> + <code>.cell-body</code>. The Jupyter feeling without the Jupyter weight.</p>
   <div class="sg-pair">
     <div class="sg-demo" style="background: var(--paper-raise); padding: 1rem 0.5rem;">
       <article class="cell cell-md">
@@ -341,7 +341,7 @@
           <span>dataset summary · high confidence</span>
           <span class="cite">anthropic:claude-opus-4-7</span>
         </div>
-        <p>This is the VizWiz validation set. The question column is where character lives — only 2,798 unique values with a 35% duplicate rate, dominated by generic prompts like "What is this?" (523 occurrences). Worth a closer look first: the answer_type column is 62% "other", and answers stores serialized Python dicts.</p>
+        <p>This is the VizWiz validation set. The question column is where character lives: only 2,798 unique values with a 35% duplicate rate, dominated by generic prompts like "What is this?" (523 occurrences). Worth a closer look first: the answer_type column is 62% "other", and answers stores serialized Python dicts.</p>
         <p class="cite">citing: question.duplicate_rate · answer_type.top_rate · answers.top_words</p>
       </div>
     </div>
@@ -466,7 +466,7 @@
     above the LLM reading on both the report view (as <code>.notes-card</code>) and the
     notebook view (as a <code>.cell-notes</code> cell). Markdown goes through
     <code>markdown</code> + <code>bleach</code> with an allowlist tuned for research
-    notes — tables, fenced code, footnotes, links allowed; script/style/iframe/inline
+    notes (tables, fenced code, footnotes, links allowed; script/style/iframe/inline
     handlers stripped. Bare URLs auto-linkify.
   </p>
   <div class="sg-row">
@@ -478,7 +478,7 @@
         </div>
         <div class="notes-body">
           <p>Reviewed 2026-04-23. <strong>Caveat:</strong> the firehose split is
-          anonymised — <code>author_handle</code> is null for every row.</p>
+          anonymised: <code>author_handle</code> is null for every row.</p>
           <p>Follow-up: rerun compare with the curated split alone for a clean
           baseline (see <a href="https://example.org/notes">project notebook</a>).</p>
         </div>
