@@ -66,6 +66,7 @@
     <li><a href="#tables">09 · Tables</a></li>
     <li><a href="#dropzone">10 · Drop zone</a></li>
     <li><a href="#footer">11 · Reproducibility footer</a></li>
+    <li><a href="#notes">12 · Notes sidecar</a></li>
   </ul>
 </aside>
 
@@ -176,6 +177,7 @@
         <span class="stamp">profile</span>
         <span class="stamp stamp--insight">reading</span>
         <span class="stamp stamp--compare">compare</span>
+        <span class="stamp stamp--notes">notes</span>
         <span class="verdict verdict-agree">agree</span>
         <span class="verdict verdict-partial">partial</span>
         <span class="verdict verdict-disagree">disagree</span>
@@ -193,6 +195,7 @@
 &lt;span class="stamp"&gt;profile&lt;/span&gt;
 &lt;span class="stamp stamp--insight"&gt;reading&lt;/span&gt;
 &lt;span class="stamp stamp--compare"&gt;compare&lt;/span&gt;
+&lt;span class="stamp stamp--notes"&gt;notes&lt;/span&gt;
 
 &lt;span class="verdict verdict-agree"&gt;agree&lt;/span&gt;
 &lt;span class="verdict verdict-partial"&gt;partial&lt;/span&gt;
@@ -451,6 +454,47 @@
     &lt;dt&gt;raw JSON&lt;/dt&gt;&lt;dd&gt;&lt;a href="…"&gt;findings.json&lt;/a&gt;&lt;/dd&gt;
   &lt;/dl&gt;
 &lt;/footer&gt;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sg-section" id="notes">
+  <h2>12 · Notes sidecar</h2>
+  <p style="max-width: var(--measure); color: var(--muted);">
+    Drop a <code>&lt;id&gt;.notes.md</code> next to the findings JSON and the viewer renders it
+    above the LLM reading on both the report view (as <code>.notes-card</code>) and the
+    notebook view (as a <code>.cell-notes</code> cell). Markdown goes through
+    <code>markdown</code> + <code>bleach</code> with an allowlist tuned for research
+    notes — tables, fenced code, footnotes, links allowed; script/style/iframe/inline
+    handlers stripped. Bare URLs auto-linkify.
+  </p>
+  <div class="sg-row">
+    <div class="sg-demo" aria-label="Report notes card example">
+      <section class="notes-card" aria-labelledby="sg-notes-h">
+        <div class="notes-meta">
+          <h2 id="sg-notes-h" style="margin: 0; font-size: var(--size-h3);">Notes</h2>
+          <span class="muted">edit <code>demo.notes.md</code> beside the findings JSON</span>
+        </div>
+        <div class="notes-body">
+          <p>Reviewed 2026-04-23. <strong>Caveat:</strong> the firehose split is
+          anonymised — <code>author_handle</code> is null for every row.</p>
+          <p>Follow-up: rerun compare with the curated split alone for a clean
+          baseline (see <a href="https://example.org/notes">project notebook</a>).</p>
+        </div>
+      </section>
+    </div>
+    <div class="sg-source">
+      <span class="sg-source-label">Markup</span>
+<pre>{% raw %}{% if notes_html %}
+&lt;section class="notes-card" aria-labelledby="notes-heading"&gt;
+  &lt;div class="notes-meta"&gt;
+    &lt;h2 id="notes-heading"&gt;Notes&lt;/h2&gt;
+    &lt;span class="muted"&gt;edit &lt;code&gt;{{ doc.id }}.notes.md&lt;/code&gt;&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class="notes-body"&gt;{{ notes_html | safe }}&lt;/div&gt;
+&lt;/section&gt;
+{% endif %}{% endraw %}</pre>
     </div>
   </div>
 </section>
