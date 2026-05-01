@@ -199,3 +199,34 @@ def test_notebook_view_renders_notes_cell_when_sidecar_present(client, findings_
     assert resp.status_code == 200
     assert "cell-notes" in body
     assert "Reviewed 2026-04-23" in body
+
+
+def test_view_does_not_500_on_unreadable_notes_file(client, findings_dir: Path):
+    """A notes file that exists but isn't valid markdown shouldn't 500 the view."""
+    # Bytes that crash various decoders. render_notes catches OSError;
+    # markdown.convert + bleach handle weird input gracefully.
+    notes = findings_dir / "demo.notes.md"
+    notes.write_bytes(b"\x00\x01\x02 garbage bytes")
+    resp = client.get("/view/demo")
+    assert resp.status_code == 200
+
+
+def test_view_strips_dangerous_content_from_notes(client, findings_dir: Path):
+    """End-to-end: malicious content in a sidecar never reaches the rendered HTML."""
+    (findings_dir / "demo.notes.md").write_text(
+        "<script>steal()</script>\n"
+        '<a href="javascript:bad()">x</a>\n'
+    )
+    body = client.get("/view/demo").get_data(as_text=True)
+    # The page itself loads legitimate <script src="..."> tags for assets, so
+    # we narrow to the notes section's body div.
+    start = body.find('<div class="notes-body">')
+    end = body.find("</div>", start) if start != -1 else -1
+    assert start != -1, "notes section should render when sidecar exists"
+    notes_section = body[start:end]
+    # The script tag itself is removed (so the browser will not execute it).
+    # bleach.strip preserves inner text as plain text, which is safe — it's
+    # rendered but not executable.
+    assert "<script" not in notes_section.lower()
+    assert "</script>" not in notes_section.lower()
+    assert "javascript:" not in notes_section
