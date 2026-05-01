@@ -137,12 +137,14 @@
                data-name="{{ d.id }}"
                data-kind="{{ d.kind.value }}"
                data-source="{{ d.meta.source if d.kind.value == 'profile' else (d.a_label ~ ' vs ' ~ d.b_label) }}"
-               data-has-insight="{{ '1' if has_insights else '0' }}">
+               data-has-insight="{{ '1' if has_insights else '0' }}"
+               data-has-notes="{{ '1' if d.has_notes else '0' }}">
         <div>
           <div class="numeral"><span class="numeral-current">{{ "%03d" | format(loop.index) }}</span> / {{ "%03d" | format(docs|length) }}</div>
           <div class="stamps">
             <span class="stamp">{{ d.kind.value }}</span>
             {% if has_insights %}<span class="stamp stamp--insight">reading</span>{% endif %}
+            {% if d.has_notes %}<span class="stamp stamp--notes" title="Has researcher notes">notes</span>{% endif %}
           </div>
         </div>
         <div>

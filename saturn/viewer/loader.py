@@ -29,6 +29,7 @@ class FindingsDoc:
     columns: list[dict[str, Any]] | None = None
     a_label: str | None = None
     b_label: str | None = None
+    has_notes: bool = False
 
 
 def _classify(payload: dict[str, Any]) -> FindingsKind:
@@ -56,6 +57,7 @@ def load_findings(path: Path) -> FindingsDoc:
     else:
         doc.a_label = payload["a"].get("label", "A")
         doc.b_label = payload["b"].get("label", "B")
+    doc.has_notes = path.with_suffix(".notes.md").is_file()
     return doc
 
 

@@ -129,3 +129,25 @@ def test_list_findings_skips_non_saturn_json(tmp_path):
 
 def test_list_findings_empty_for_missing_dir(tmp_path):
     assert list_findings(tmp_path / "does-not-exist") == []
+
+
+def test_load_findings_sets_has_notes_false_when_no_sidecar(tmp_path):
+    p = tmp_path / "r.json"
+    _write_profile_findings(p)
+    assert load_findings(p).has_notes is False
+
+
+def test_load_findings_sets_has_notes_true_when_sidecar_present(tmp_path):
+    p = tmp_path / "r.json"
+    _write_profile_findings(p)
+    (tmp_path / "r.notes.md").write_text("# notes\n")
+    assert load_findings(p).has_notes is True
+
+
+def test_list_findings_propagates_has_notes(tmp_path):
+    _write_profile_findings(tmp_path / "with.json")
+    (tmp_path / "with.notes.md").write_text("notes!\n")
+    _write_profile_findings(tmp_path / "without.json")
+
+    by_id = {d.id: d.has_notes for d in list_findings(tmp_path)}
+    assert by_id == {"with": True, "without": False}

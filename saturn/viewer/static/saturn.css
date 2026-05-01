@@ -508,6 +508,7 @@ a:focus-visible {
 }
 .stamp--insight { border-color: var(--hot); color: var(--hot); }
 .stamp--compare { border-color: var(--cool); color: var(--cool); }
+.stamp--notes { border-color: var(--ink); color: var(--ink); background: var(--paper-raise); }
 
 /* empty state */
 .empty {
