@@ -8,6 +8,7 @@
 
 {# ===== helper namespace for execution counters ===== #}
 {% set ns = namespace(cell=0) %}
+{% set fig_no = namespace(n=0) %}
 
 {% set insights = doc.raw.get('insights', {}) %}
 {% set insight_items = insights.get('insights', []) %}
@@ -145,11 +146,31 @@ subprocess.run([
     </div>
   </article>
 
-  {# ---- Cell 5 ▸ figure: dataset overview ---- #}
+  {# ---- Featured charts the model picked, before generic dataset overview ---- #}
+  {% if dataset_insight and dataset_insight.featured_charts %}
+    {% for fc in dataset_insight.featured_charts %}
+      {% if charts.get(fc.column) %}
+        {% set fig_no.n = fig_no.n + 1 %}
+        {% set ns.cell = ns.cell + 1 %}
+        <article class="cell cell-figure">
+          <div class="gutter">Fig&nbsp;{{ fig_no.n }}.</div>
+          <div class="cell-body">
+            <figure>
+              {{ charts[fc.column] | safe }}
+              <figcaption><strong>{{ fc.column }}</strong> &middot; {{ fc.caption or 'featured by the summary' }}</figcaption>
+            </figure>
+          </div>
+        </article>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  {# ---- figure: dataset overview ---- #}
   {% if overview_chart %}
+    {% set fig_no.n = fig_no.n + 1 %}
     {% set ns.cell = ns.cell + 1 %}
     <article class="cell cell-figure">
-      <div class="gutter">Fig&nbsp;1.</div>
+      <div class="gutter">Fig&nbsp;{{ fig_no.n }}.</div>
       <div class="cell-body">
         <figure>
           {{ overview_chart | safe }}
@@ -159,11 +180,12 @@ subprocess.run([
     </article>
   {% endif %}
 
-  {# ---- Cell 6 ▸ figure: languages (if any) ---- #}
+  {# ---- figure: languages (if any) ---- #}
   {% if charts.get('__languages__') %}
+    {% set fig_no.n = fig_no.n + 1 %}
     {% set ns.cell = ns.cell + 1 %}
     <article class="cell cell-figure">
-      <div class="gutter">Fig&nbsp;2.</div>
+      <div class="gutter">Fig&nbsp;{{ fig_no.n }}.</div>
       <div class="cell-body">
         <figure>
           {{ charts['__languages__'] | safe }}
@@ -175,9 +197,10 @@ subprocess.run([
 
   {# ---- Cell 7 ▸ figure: correlation heatmap (if ≥2 numeric) ---- #}
   {% if charts.get('__correlation__') %}
+    {% set fig_no.n = fig_no.n + 1 %}
     {% set ns.cell = ns.cell + 1 %}
     <article class="cell cell-figure">
-      <div class="gutter">Fig&nbsp;3.</div>
+      <div class="gutter">Fig&nbsp;{{ fig_no.n }}.</div>
       <div class="cell-body">
         <figure>
           {{ charts['__correlation__'] | safe }}
@@ -187,19 +210,25 @@ subprocess.run([
     </article>
   {% endif %}
 
-  {# ---- Per-column sections ---- #}
-  {% set fig_no = namespace(n=3) %}
+  {# ---- Per-column sections (figure numbering picks up where the dataset cells left off) ---- #}
   {% for c in doc.columns %}
     {# markdown: column heading + LLM insight #}
     {% set ns.cell = ns.cell + 1 %}
     <article class="cell cell-md" id="cell-col-{{ c.column }}">
       <div class="gutter"></div>
       <div class="cell-body">
-        <h3>{{ c.column }} <small class="chip">{{ c.kind }}</small></h3>
         {% set ci = col_insights.get(c.column) %}
+        <h3>
+          {{ c.column }}
+          <small class="chip">{{ c.kind }}</small>
+          {% if ci and ci.get('role') %}<small class="chip chip-role">{{ ci.role }}</small>{% endif %}
+        </h3>
         {% if ci %}
           <blockquote class="insight">
             <p>{{ ci.narrative }}</p>
+            {% if ci.get('treatment') %}
+              <p class="treatment"><strong>Treatment:</strong> {{ ci.treatment }}</p>
+            {% endif %}
             <footer><em>{{ ci.model }}</em> · confidence {{ ci.confidence }}</footer>
           </blockquote>
         {% endif %}

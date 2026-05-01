@@ -1377,3 +1377,48 @@ a:focus-visible {
   border-color: var(--hot);
 }
 .byok p.hint { margin: calc(var(--step) * 1) 0; }
+
+/* Model-curated chips */
+.chip-role {
+  background: var(--cool-wash);
+  color: var(--cool);
+  border-color: var(--cool);
+  font-weight: 500;
+}
+
+/* Treatment line under the per-column narrative */
+.per-col-summary .treatment-line,
+.cell-md .insight .treatment {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: var(--size-small);
+  color: var(--ink-soft);
+}
+
+/* Featured charts rail in the report view */
+.featured-rail {
+  margin: calc(var(--step) * 4) 0 calc(var(--step) * 2) 0;
+  border-top: 1px solid var(--rule);
+  padding-top: calc(var(--step) * 3);
+}
+.featured-rail h3 {
+  font-family: var(--font-mono);
+  font-size: var(--size-eyebrow);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  margin: 0 0 calc(var(--step) * 2) 0;
+}
+.featured-figure {
+  margin: 0 0 calc(var(--step) * 3) 0;
+  background: var(--paper);
+}
+.featured-figure figcaption {
+  font-family: var(--font-body);
+  font-size: var(--size-small);
+  font-style: italic;
+  color: var(--muted);
+  margin-top: calc(var(--step) * 1);
+  max-width: var(--measure);
+}

@@ -15,6 +15,11 @@ _OBJ = re.compile(r"\{.*\}", re.DOTALL)
 
 _VALID_CONFIDENCE = {"high", "medium", "low"}
 _VALID_VERDICT = {"agree", "disagree", "partial"}
+_VALID_ROLES = {
+    "identifier", "label", "feature", "metadata", "free_text",
+    "timestamp", "numeric_target", "foreign_key", "other",
+}
+_VALID_CHART_KINDS = {"histogram", "bar", "donut", "length"}
 
 
 def extract_json(raw: str) -> dict[str, Any]:
@@ -37,11 +42,38 @@ def parse_insight_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"invalid confidence: {payload['confidence']!r}")
     if not isinstance(payload["evidence_keys"], list):
         raise ValueError("evidence_keys must be a list")
-    return {
+    out: dict[str, Any] = {
         "narrative": str(payload["narrative"]),
         "confidence": payload["confidence"],
         "evidence_keys": [str(k) for k in payload["evidence_keys"]],
     }
+    # v2 optional curation fields. Silently drop anything the model fluffed.
+    role = payload.get("role")
+    if isinstance(role, str) and role in _VALID_ROLES:
+        out["role"] = role
+    treatment = payload.get("treatment")
+    if isinstance(treatment, str) and treatment.strip():
+        out["treatment"] = treatment.strip()
+    fc = payload.get("featured_charts")
+    if isinstance(fc, list):
+        cleaned = []
+        for item in fc:
+            if not isinstance(item, dict):
+                continue
+            col = item.get("column")
+            kind = item.get("kind")
+            if not isinstance(col, str) or not col:
+                continue
+            if kind not in _VALID_CHART_KINDS:
+                continue
+            cleaned.append({
+                "column": col,
+                "kind": kind,
+                "caption": str(item.get("caption", "")).strip(),
+            })
+        if cleaned:
+            out["featured_charts"] = cleaned[:5]  # cap at 5 per the prompt
+    return out
 
 
 def parse_critique_payload(payload: dict[str, Any]) -> dict[str, Any]:
