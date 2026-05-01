@@ -30,8 +30,22 @@ class Insight:
     model: str          # "provider:model_id"
     critiques: list[Critique] = field(default_factory=list)
 
+    # Column-scope curation fields (None on dataset-scope insights):
+    # - `role` is one of identifier | label | feature | metadata | free_text |
+    #   timestamp | numeric_target | foreign_key | other. Drives a chip on
+    #   the column heading and changes the default treatment recommendation.
+    # - `treatment` is a one-line suggestion the model gives for handling
+    #   this column downstream ("normalize before modeling", "drop", "tokenize").
+    role: str | None = None
+    treatment: str | None = None
+
+    # Dataset-scope curation field (empty on column-scope insights). Each item
+    # is `{"column": str, "kind": str, "caption": str}`. The viewer promotes
+    # these to a "featured charts" rail so non-experts know what to look at first.
+    featured_charts: list[dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "scope": self.scope,
             "target": self.target,
             "narrative": self.narrative,
@@ -40,6 +54,13 @@ class Insight:
             "model": self.model,
             "critiques": [c.to_dict() for c in self.critiques],
         }
+        if self.role is not None:
+            out["role"] = self.role
+        if self.treatment is not None:
+            out["treatment"] = self.treatment
+        if self.featured_charts:
+            out["featured_charts"] = self.featured_charts
+        return out
 
 
 @dataclass

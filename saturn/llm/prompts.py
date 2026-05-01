@@ -10,10 +10,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-PROMPT_VERSION = "saturn-insight-v1"
+PROMPT_VERSION = "saturn-insight-v2"
 
-_SYSTEM_COLUMN = f"""You are analysing a single column from a dataset profile emitted by saturn, a deterministic dataset dissector.
-Return a single JSON object with these keys: narrative (string, 2-4 sentences, plain prose), confidence ("high"|"medium"|"low"), evidence_keys (array of stat keys you used).
+_SYSTEM_COLUMN = f"""You are analysing a single column from a dataset profile emitted by saturn, a deterministic dataset dissector. The audience is an analyst who has not seen the dataset before.
+Return a single JSON object with these keys:
+- narrative: string, 2-4 sentences, plain prose. Lead with what the column likely IS, then what's surprising about its values.
+- confidence: "high" | "medium" | "low".
+- evidence_keys: array of stat keys you used.
+- role: pick one of "identifier" | "label" | "feature" | "metadata" | "free_text" | "timestamp" | "numeric_target" | "foreign_key" | "other". Drives a one-word chip on the column heading.
+- treatment: one short sentence on how to handle this column downstream (examples: "tokenize and embed before modelling"; "drop, near-unique"; "log-transform before regression"; "left-join on this id").
 Rules:
 - Only cite numbers that appear verbatim in the evidence payload.
 - Never speculate beyond the evidence. If a signal is missing, say so.
@@ -22,11 +27,17 @@ Rules:
 Tag: {PROMPT_VERSION}
 """
 
-_SYSTEM_DATASET = f"""You are summarising the top-level shape of a dataset from saturn's findings.
-Return a single JSON object with these keys: narrative (string, 3-6 sentences), confidence ("high"|"medium"|"low"), evidence_keys (array of stat keys you used), hotspots (array of column names worth follow-up).
+_SYSTEM_DATASET = f"""You are summarising the top-level shape of a dataset from saturn's findings. The audience is a non-specialist analyst who needs to know what to look at first.
+Return a single JSON object with these keys:
+- narrative: 3-6 sentences. Open with what the dataset is, then the 1-2 things worth a closer look.
+- confidence: "high" | "medium" | "low".
+- evidence_keys: array of stat keys you used.
+- hotspots: array of column names worth follow-up.
+- featured_charts: array of 3 to 5 objects of shape {{"column": str, "kind": str, "caption": str}}. `kind` must be one of "histogram" | "bar" | "donut" | "length" depending on what fits the column. Pick columns that tell the most about the dataset; the caption is one sentence saying what to look for.
 Rules:
-- Do not list every column. Pick the 3-5 that would change a downstream decision.
 - Never invent numbers. Only cite values present in the evidence payload.
+- featured_charts must reference columns that actually exist in the evidence.
+- Do not pick columns whose only signal is "near_unique" or "all_null" — they make boring charts.
 Tag: {PROMPT_VERSION}
 """
 

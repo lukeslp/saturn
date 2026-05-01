@@ -66,6 +66,9 @@ def _one_insight(
         confidence=payload["confidence"],
         evidence_keys=payload["evidence_keys"],
         model=spec.label(),
+        role=payload.get("role"),
+        treatment=payload.get("treatment"),
+        featured_charts=payload.get("featured_charts", []),
     )
 
 

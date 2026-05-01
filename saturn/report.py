@@ -139,6 +139,9 @@ class ReportData:
                         evidence_keys=ins.get("evidence_keys", []),
                         model=ins["model"],
                         critiques=critiques,
+                        role=ins.get("role"),
+                        treatment=ins.get("treatment"),
+                        featured_charts=ins.get("featured_charts", []) or [],
                     )
                 )
             data.insight_bundle = InsightBundle(

@@ -88,6 +88,16 @@ def _unique_finding_id(findings_dir: Path, base: str) -> str:
     return candidate
 
 
+def _featured_columns(doc) -> list[str]:
+    """Return the column names the LLM picked as featured charts, if any."""
+    insights = (doc.raw.get("insights") or {}).get("insights") or []
+    for ins in insights:
+        if ins.get("scope") == "dataset" and ins.get("target") == "__global__":
+            fc = ins.get("featured_charts") or []
+            return [item["column"] for item in fc if isinstance(item, dict) and "column" in item]
+    return []
+
+
 def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str | None, str | None]:
     """Pick (provider_spec, api_key) for a request, honoring BYOK.
 
@@ -150,7 +160,10 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             view_mode = "report"
 
         charts, overview_chart = {}, None
-        if view_mode == "notebook" and doc.kind is FindingsKind.PROFILE:
+        # Notebook view always builds the full chart set; report view only
+        # builds the columns the model picked as featured (cheap render).
+        needs_charts = view_mode == "notebook" or _featured_columns(doc)
+        if needs_charts and doc.kind is FindingsKind.PROFILE:
             from ..charts import (
                 chart_for,
                 correlation_heatmap,
@@ -160,11 +173,28 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
             from ..report import ReportData
 
             report = ReportData.from_findings(doc.raw)
+            wanted = (
+                set(r.column for r in report.results)
+                if view_mode == "notebook"
+                else set(_featured_columns(doc))
+            )
             for result in report.results:
+                if result.column not in wanted:
+                    continue
                 try:
                     charts[result.column] = chart_for(result)
                 except Exception:
                     charts[result.column] = None
+            if view_mode != "notebook":
+                # report view doesn't render the dataset-level charts inline
+                return render_template(
+                    "profile.html.j2",
+                    doc=doc,
+                    default_llm=app.config["SATURN_DEFAULT_LLM"],
+                    view_mode=view_mode,
+                    charts=charts,
+                    overview_chart=None,
+                )
             overview_chart = dataset_overview_chart(
                 [(r.column, r.null_rate) for r in report.results]
             )

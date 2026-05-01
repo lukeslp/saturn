@@ -59,6 +59,24 @@
       </form>
     </div>
   {% endif %}
+
+  {# featured charts the model picked — only the ones we actually rendered #}
+  {% if dataset_insight and dataset_insight.get('featured_charts') and charts %}
+    <section class="featured-rail" aria-labelledby="featured-heading">
+      <h3 id="featured-heading">Charts the summary said to look at first</h3>
+      {% for fc in dataset_insight.featured_charts %}
+        {% if charts.get(fc.column) %}
+          <figure class="featured-figure">
+            {{ charts[fc.column] | safe }}
+            <figcaption>
+              <strong>{{ fc.column }}</strong>
+              {% if fc.caption %} &middot; {{ fc.caption }}{% endif %}
+            </figcaption>
+          </figure>
+        {% endif %}
+      {% endfor %}
+    </section>
+  {% endif %}
 </section>
 
 <aside class="aside" aria-labelledby="at-a-glance">
@@ -132,9 +150,11 @@
 
 {% for c in doc.columns %}
   <section id="col-{{ c.column }}" class="column-detail" aria-labelledby="col-{{ c.column }}-heading">
+    {% set ci = col_insight_by_name.get(c.column) %}
     <div class="detail-head">
       <h3 id="col-{{ c.column }}-heading">{{ c.column }}</h3>
       <span class="chip">{{ c.kind }}</span>
+      {% if ci and ci.get('role') %}<span class="chip chip-role">{{ ci.role }}</span>{% endif %}
       {% if c.alerts %}
         <span class="alerts-cell">
           {% for a in c.alerts %}
@@ -143,10 +163,12 @@
         </span>
       {% endif %}
     </div>
-    {% set ci = col_insight_by_name.get(c.column) %}
     {% if ci %}
       <blockquote class="per-col-summary">
         {{ ci.narrative }}
+        {% if ci.get('treatment') %}
+          <span class="treatment-line"><strong>Treatment:</strong> {{ ci.treatment }}</span>
+        {% endif %}
         <span class="author">{{ ci.confidence }} · {{ ci.model }}</span>
       </blockquote>
     {% endif %}
