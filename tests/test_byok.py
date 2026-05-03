@@ -166,6 +166,47 @@ def test_load_api_keys_other_providers_still_raise_when_missing(monkeypatch):
         load_api_keys(["anthropic"])
 
 
+# ---------- demo-mode env: SATURN_PUBLIC_KEYS=1 ------------------------------
+
+
+def test_demo_mode_does_not_disable_config_manager(monkeypatch):
+    """When SATURN_PUBLIC_KEYS=1, anonymous uploads silently use the
+    server's keys instead of being scrubbed and bypassed."""
+    from saturn.viewer.runner import _build_subprocess_env
+
+    monkeypatch.setenv("SATURN_PUBLIC_KEYS", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "server-key-xyz")
+    env = _build_subprocess_env("anthropic", None)
+    # Server key is preserved
+    assert env.get("ANTHROPIC_API_KEY") == "server-key-xyz"
+    # ConfigManager fallback is NOT disabled
+    assert env.get("SATURN_LLM_DISABLE_CONFIG_MANAGER") != "1"
+
+
+def test_demo_mode_off_still_scrubs_no_byok_uploads(monkeypatch):
+    """Default (private) posture: no BYOK + no demo flag = key scrubbed."""
+    from saturn.viewer.runner import _build_subprocess_env
+
+    monkeypatch.delenv("SATURN_PUBLIC_KEYS", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "server-key-xyz")
+    env = _build_subprocess_env("anthropic", None)
+    assert env.get("ANTHROPIC_API_KEY") is None
+    assert env.get("SATURN_LLM_DISABLE_CONFIG_MANAGER") == "1"
+
+
+def test_byok_still_isolates_in_demo_mode(monkeypatch):
+    """Even in demo mode, an explicit BYOK key isolates that provider's
+    key only — server keys for other providers are scrubbed."""
+    from saturn.viewer.runner import _build_subprocess_env
+
+    monkeypatch.setenv("SATURN_PUBLIC_KEYS", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "server-anthropic")
+    monkeypatch.setenv("OPENAI_API_KEY", "server-openai")
+    env = _build_subprocess_env("openai", "user-supplied-openai-key")
+    assert env.get("OPENAI_API_KEY") == "user-supplied-openai-key"
+    assert env.get("ANTHROPIC_API_KEY") is None  # scrubbed
+
+
 # ---------- routes thread api_key through to the runner ----------------------
 
 

@@ -27,6 +27,11 @@ export SATURN_TRUST_FORWARDED_PREFIX=1
 # from ~/documentation/API_KEYS.md, so we don't hardcode it here. Override
 # SATURN_DEFAULT_LLM if a future demo wants a different provider/model.
 export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-anthropic:claude-opus-4-7}"
+# Demo posture: anonymous uploads silently use the server's keys. Without
+# this flag, public submissions are forced into BYOK mode (or fail). For a
+# self-hosted private instance, leave this unset so visitors can't drain
+# the operator's quota.
+export SATURN_PUBLIC_KEYS="${SATURN_PUBLIC_KEYS:-1}"
 
 mkdir -p "$FINDINGS_DIR"
 

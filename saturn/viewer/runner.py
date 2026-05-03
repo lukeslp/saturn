@@ -219,14 +219,16 @@ def _build_subprocess_env(provider_spec: str | None, api_key: str | None) -> dic
     """Construct the env for `saturn` subprocess so BYOK works correctly.
 
     - If api_key is supplied AND a provider spec is set, inject only that key.
-    - If api_key is None: scrub all known provider keys from the env so a
-      public-viewer call cannot fall through to server-configured keys
-      silently. ConfigManager (~/documentation/API_KEYS.md) is also bypassed
-      by setting SATURN_LLM_DISABLE_CONFIG_MANAGER=1, which key resolution
-      respects.
+    - If api_key is None and SATURN_PUBLIC_KEYS=1: this is demo mode. The
+      visitor's anonymous upload silently uses the server's keys
+      (ConfigManager + env). That's the dr.eamer.dev/saturn posture.
+    - If api_key is None and SATURN_PUBLIC_KEYS is NOT set: this is the
+      private-instance posture. Keys are scrubbed and ConfigManager bypassed
+      so visitors cannot accidentally drain the server's quota.
     """
     env = os.environ.copy()
     env["PYTHONPATH"] = f"/home/coolhand/shared:{env.get('PYTHONPATH', '')}"
+    demo_mode = os.environ.get("SATURN_PUBLIC_KEYS") == "1"
 
     if api_key and provider_spec:
         # Only set the one key the user supplied — wipe any others to avoid
@@ -244,9 +246,15 @@ def _build_subprocess_env(provider_spec: str | None, api_key: str | None) -> dic
         else:
             env_var = _PROVIDER_KEY_ENV.get(provider, f"{provider.upper()}_API_KEY")
             env[env_var] = api_key
+    elif provider_spec and demo_mode:
+        # Demo posture: pass through the server's keys + ConfigManager so the
+        # visitor's analyze just works. Already preserved by env.copy() above.
+        pass
     elif provider_spec:
-        # No BYOK + provider was requested → scrub ConfigManager fallback so
-        # the public form can't silently use the server's docs/API_KEYS.md.
+        # No BYOK + provider was requested → scrub server keys (env + Config
+        # Manager) so the public form can't silently drain operator quota.
+        for ev in _PROVIDER_KEY_ENV.values():
+            env.pop(ev, None)
         env["SATURN_LLM_DISABLE_CONFIG_MANAGER"] = "1"
     return env
 
