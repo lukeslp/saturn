@@ -55,22 +55,6 @@
   --radius: 3px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #17160F;
-    --paper-raise: #1E1D15;
-    --ink: #F3EFE4;
-    --ink-soft: #CFC9BC;
-    --muted: #867F70;
-    --rule: rgba(243, 239, 228, 0.14);
-    --rule-strong: rgba(243, 239, 228, 0.32);
-    --hot: #F1604E;
-    --hot-wash: rgba(241, 96, 78, 0.12);
-    --cool: #6FA3D2;
-    --cool-wash: rgba(111, 163, 210, 0.12);
-  }
-}
-
 /* ---------- reset + base -------------------------------------------------- */
 
 *, *::before, *::after { box-sizing: border-box; }
