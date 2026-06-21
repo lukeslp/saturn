@@ -1,7 +1,18 @@
-"""Saturn CLI entry point."""
+"""Saturn CLI entry point.
+
+File purpose: Typer command surface for saturn (analyze / huggingface / compare /
+serve / version). Owns the profile pipeline orchestration (`_run`), the
+insight-pass hooks, and the emit step that writes the JSON findings sidecar and
+HTML report.
+
+Primary commands: analyze, huggingface, compare, serve, version.
+I/O: reads a dataset source (HF repo id or local file), writes a findings JSON
+and an HTML report to disk; the optional LLM insight pass is gated behind --llm.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -63,7 +74,30 @@ def _resolve_llm(llm_spec: list[str] | None):
     return specs, keys
 
 
-def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
+def _redact_values(flag: bool) -> bool:
+    """Effective redaction setting: the --no-evidence-values flag OR the env switch.
+
+    When True, literal cell values (`top_values` / `top_words` / categorical
+    `top_value`) are withheld from the model-ready evidence; only aggregates are
+    forwarded. The env var lets a public deployment force-redact without threading
+    a flag through every form.
+    """
+    if flag:
+        return True
+    try:
+        from .llm.evidence import redact_values_from_env
+
+        return redact_values_from_env()
+    except ImportError:  # llm package import path unavailable; fall back to env read
+        return os.environ.get("SATURN_REDACT_EVIDENCE_VALUES", "").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+
+
+def _maybe_run_insights(
+    data, llm_spec: list[str] | None, *, redact_values: bool = False,
+    max_columns: int = 40, skip_null_rate: float = 0.95,
+) -> None:
     """Populate `data.insight_bundle` when --llm was passed. Fail-open throughout."""
     resolved = _resolve_llm(llm_spec)
     if resolved is None:
@@ -71,8 +105,13 @@ def _maybe_run_insights(data, llm_spec: list[str] | None) -> None:
     specs, keys = resolved
 
     label = ", ".join(s.label() for s in specs)
+    if redact_values:
+        console.print("[dim]evidence redaction:[/] literal cell values withheld from model")
     with console.status(f"insight pass ({label})", spinner="dots"):
-        bundle = run_insights(data, specs=specs, api_keys=keys)
+        bundle = run_insights(
+            data, specs=specs, api_keys=keys, redact_values=redact_values,
+            max_columns=max_columns, skip_null_rate=skip_null_rate,
+        )
     data.insight_bundle = bundle
 
     if bundle.errors:
@@ -120,11 +159,24 @@ def _emit_outputs(
     render,
     write,
 ) -> None:
-    """Render HTML + write findings + optionally open browser. Same UX in all commands."""
-    out_path = render(data, out)
+    """Write findings + render HTML + optionally open browser. Same UX in all commands.
+
+    Findings JSON is written FIRST, before charts render. Chart rendering can
+    crash on pathological columns (e.g. all-NaN coordinates), and the
+    deterministic stats pass is the product, so it must never be lost to a
+    best-effort chart. HTML render failure degrades to a warning, not a lost run.
+    """
     findings_path = write(data, findings)
-    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
     console.print(f"[green]✓[/] JSON findings: [bold]{findings_path}[/]")
+    try:
+        out_path = render(data, out)
+    except Exception as e:  # charts are best-effort; stats are already safe on disk
+        console.print(
+            f"[yellow]⚠ HTML render failed ({type(e).__name__}: {e}); "
+            f"findings already saved to {findings_path}[/]"
+        )
+        return
+    console.print(f"[green]✓[/] HTML report: [bold]{out_path}[/]")
     if open_browser:
         import webbrowser
         webbrowser.open(out_path.as_uri())
@@ -142,6 +194,9 @@ def _run(
     llm_spec: list[str] | None,
     sample_size: int | None,
     sheet: str | int | None = None,
+    no_evidence_values: bool = False,
+    llm_max_columns: int = 40,
+    llm_skip_null_rate: float = 0.95,
 ) -> None:
     """Common pipeline: adapter -> schema -> profile -> assemble -> insights -> emit.
 
@@ -207,7 +262,10 @@ def _run(
 
     _print_summary(schema.columns, results, effective_count)
 
-    _maybe_run_insights(data, llm_spec)
+    _maybe_run_insights(
+        data, llm_spec, redact_values=_redact_values(no_evidence_values),
+        max_columns=llm_max_columns, skip_null_rate=llm_skip_null_rate,
+    )
 
     _emit_outputs(
         data, out=out, findings=findings, open_browser=open_browser,
@@ -262,6 +320,23 @@ def analyze(
         "--sheet",
         help="for XLSX/ODS files: sheet name or 1-based index (default: first sheet)",
     ),
+    no_evidence_values: bool = typer.Option(
+        False,
+        "--no-evidence-values",
+        help="withhold literal cell values (top values/words) from the LLM evidence; "
+             "only aggregates are sent. Also via SATURN_REDACT_EVIDENCE_VALUES=1.",
+    ),
+    llm_max_columns: int = typer.Option(
+        40,
+        "--llm-max-columns",
+        help="cap how many columns get a per-column LLM insight (-1 = no cap, 0 = none). "
+             "Deterministic stats still cover every column.",
+    ),
+    llm_skip_null_rate: float = typer.Option(
+        0.95,
+        "--llm-skip-null-rate",
+        help="skip per-column LLM insight for columns at/above this null rate (0-1).",
+    ),
 ) -> None:
     _run(
         source,
@@ -274,6 +349,9 @@ def analyze(
         llm_spec=llm_spec,
         sample_size=sample_size,
         sheet=sheet,
+        no_evidence_values=no_evidence_values,
+        llm_max_columns=llm_max_columns,
+        llm_skip_null_rate=llm_skip_null_rate,
     )
 
 
@@ -292,6 +370,12 @@ def huggingface(
         "--llm",
         help="provider[:model] to run insight pass. Repeat for primary + critic.",
     ),
+    no_evidence_values: bool = typer.Option(
+        False,
+        "--no-evidence-values",
+        help="withhold literal cell values (top values/words) from the LLM evidence; "
+             "only aggregates are sent. Also via SATURN_REDACT_EVIDENCE_VALUES=1.",
+    ),
 ) -> None:
     _run(
         f"hf://{repo}",
@@ -303,6 +387,7 @@ def huggingface(
         open_browser=open_browser,
         llm_spec=llm_spec,
         sample_size=sample_size,
+        no_evidence_values=no_evidence_values,
     )
 
 

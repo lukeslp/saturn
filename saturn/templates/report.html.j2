@@ -1,3 +1,17 @@
+{%- macro chart_fallback(table) -%}
+{% if table %}
+  <details class="chart-fallback">
+    <summary>Show data table</summary>
+    <table>
+      <caption class="visually-hidden">{{ table.caption }}</caption>
+      <thead><tr>{% for h in table.headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in table.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+  </details>
+{% endif %}
+{%- endmacro -%}
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,6 +20,11 @@
 <title>saturn — {{ data.meta.source }}</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  details.chart-fallback { margin: .5rem 0 0; }
+  details.chart-fallback > summary { cursor: pointer; font-size: .85rem; color: var(--muted); }
+  details.chart-fallback table { border-collapse: collapse; margin-top: .5rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  details.chart-fallback th, details.chart-fallback td { border: 1px solid #d7dbe0; padding: .2rem .5rem; text-align: left; }
   :root {
     --bg: #ffffff;
     --fg: #14161a;
@@ -80,6 +99,7 @@
       </table>
       {% if data.overview_chart_html %}
         {{ data.overview_chart_html | safe }}
+        {{ chart_fallback(overview_table) }}
       {% endif %}
     </div>
   </section>
@@ -133,7 +153,7 @@
   {% if data.correlation_chart_html %}
   <section id="correlation">
     <h2>Numeric correlation</h2>
-    <div class="card">{{ data.correlation_chart_html | safe }}</div>
+    <div class="card">{{ data.correlation_chart_html | safe }}{{ chart_fallback(correlation_table) }}</div>
   </section>
   {% endif %}
 
@@ -143,6 +163,7 @@
     <div class="card">
       <p class="muted">Per-string language detection across text columns (sampled).</p>
       {{ data.language_chart_html | safe }}
+      {{ chart_fallback(language_table) }}
     </div>
   </section>
   {% endif %}
@@ -168,6 +189,7 @@
       </div>
       {% if charts[r.column] %}
         {{ charts[r.column] | safe }}
+        {{ chart_fallback(chart_tables.get(r.column)) }}
       {% endif %}
       {% if r.kind == 'text' and r.extras.get('sample') %}
         <details>
@@ -195,6 +217,15 @@
 
   <footer>
     Saturn v{{ version }}. Report generated from a seeded reservoir sample; re-run with the same seed for identical output.
+    {% set attributions = data.attributions() %}
+    {% if attributions %}
+    <p class="muted">
+      {% for a in attributions %}
+        {{ a.component }} ({{ a.license }}). {{ a.note }}
+        {% if a.url %}<a href="{{ a.url }}">{{ a.url }}</a>{% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
   </footer>
 </main>
 </body>

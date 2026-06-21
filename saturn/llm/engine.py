@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Mapping
 
 from ..insights import Critique, Insight, InsightBundle
+from ..profilers import ProfileResult
 from ..report import ReportData
 from .compare_evidence import compare_column_evidence, compare_dataset_evidence
 from .evidence import column_evidence, dataset_evidence
@@ -94,11 +95,56 @@ def _one_critique(
     )
 
 
+def _alert_score(r: ProfileResult) -> int:
+    weights = {"error": 3, "warn": 2, "info": 1}
+    return sum(weights.get(getattr(a, "level", ""), 0) for a in (r.alerts or []))
+
+
+def _pick_columns_for_insights(
+    results: list[ProfileResult],
+    *,
+    max_columns: int,
+    skip_null_rate: float,
+) -> list[ProfileResult]:
+    """Select which columns get a per-column LLM insight.
+
+    Deterministic profiling already covers every column; this only bounds the
+    LLM loop so a pathologically wide / junk table (e.g. 257 columns, most of
+    them empty) does not fire one provider call per column. Near-empty columns
+    are dropped first, then the rest are capped, prioritising informative ones.
+    `max_columns < 0` means no cap (legacy behaviour); `0` means none.
+    """
+    if max_columns == 0:
+        return []
+    candidates = [r for r in results if float(r.null_rate or 0.0) < float(skip_null_rate)]
+
+    def _priority(r: ProfileResult):
+        kind_weight = {"text": 3, "numeric": 2, "categorical": 1, "boolean": 1}.get(
+            getattr(r, "kind", ""), 0
+        )
+        is_unnamed = str(getattr(r, "column", "")).strip().lower().startswith("unnamed")
+        return (
+            -_alert_score(r),                 # more alerts first
+            -kind_weight,                     # prefer text/numeric
+            float(r.null_rate or 0.0),        # prefer lower null rate
+            1 if is_unnamed else 0,           # penalise "Unnamed:*"
+            str(getattr(r, "column", "")),    # stable tie-break
+        )
+
+    picked = sorted(candidates, key=_priority)
+    if max_columns < 0:
+        return picked
+    return picked[:int(max_columns)]
+
+
 def run_insights(
     report: ReportData,
     *,
     specs: list[ProviderSpec],
     api_keys: Mapping[str, str],
+    redact_values: bool = False,
+    max_columns: int = 40,
+    skip_null_rate: float = 0.95,
 ) -> InsightBundle:
     if not specs:
         raise ValueError("at least one provider spec required")
@@ -108,7 +154,7 @@ def run_insights(
     critic = specs[1] if len(specs) >= 2 else None
 
     # Dataset-scope insight
-    ds_ev = dataset_evidence(report)
+    ds_ev = dataset_evidence(report, redact_values=redact_values)
     sys, user = build_dataset_prompt(ds_ev)
     ds_insight = _one_insight(
         bundle,
@@ -128,9 +174,12 @@ def run_insights(
             if crit:
                 ds_insight.critiques.append(crit)
 
-    # Per-column insights
-    for r in report.results:
-        col_ev = column_evidence(report, r.column)
+    # Per-column insights (bounded for wide / junk tables)
+    picked = _pick_columns_for_insights(
+        report.results, max_columns=max_columns, skip_null_rate=skip_null_rate
+    )
+    for r in picked:
+        col_ev = column_evidence(report, r.column, redact_values=redact_values)
         sys, user = build_column_prompt(col_ev)
         col_insight = _one_insight(
             bundle,

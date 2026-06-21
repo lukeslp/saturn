@@ -68,6 +68,24 @@ def test_compare_column_evidence_projects_both_sides_and_delta():
     assert "__engine" not in ev["a"]["language_counts"]
 
 
+def test_compare_evidence_honors_redaction_env(monkeypatch):
+    # categorical top_value is a literal cell value; the env switch must scrub it
+    cat = ProfileResult(
+        column="author", kind="categorical", n=100, n_null=0, n_unique=3,
+        stats={"top_value": "alice@example.com", "entropy": 1.0}, extras={}, alerts=[],
+    )
+    cc = ColumnComparison(column="author", kind="categorical", a=cat, b=cat, delta={})
+
+    # default: literal value present
+    ev_open = compare_column_evidence(cc, a_label="A", b_label="B")
+    assert ev_open["a"]["stats"]["top_value"] == "alice@example.com"
+
+    monkeypatch.setenv("SATURN_REDACT_EVIDENCE_VALUES", "1")
+    ev_redacted = compare_column_evidence(cc, a_label="A", b_label="B")
+    assert "top_value" not in ev_redacted["a"]["stats"]
+    assert ev_redacted["a"]["stats"]["entropy"] == 1.0
+
+
 def test_compare_column_evidence_handles_missing_side():
     # Column only in A
     a = _col("only_a", n=10, null=0, lm=5.0)

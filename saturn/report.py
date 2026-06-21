@@ -46,9 +46,49 @@ class ReportData:
     overview_chart_html: str | None = None
     language_chart_html: str | None = None
     correlation_chart_html: str | None = None
+    correlation_matrix: list[list[float]] | None = None
+    correlation_labels: list[str] | None = None
     language_counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     insight_bundle: "InsightBundle | None" = None
+
+    def used_fasttext(self) -> bool:
+        """True when any text column's language counts came from fastText lid.176.
+
+        The per-column `__engine` marker is set by the profiler; the dataset-level
+        merge strips `__`-prefixed keys, so detection reads the per-column extras.
+        """
+        for r in self.results:
+            lc = r.extras.get("language_counts")
+            if isinstance(lc, dict):
+                engine = lc.get("__engine", "")
+                if isinstance(engine, str) and engine.startswith("fasttext"):
+                    return True
+        return False
+
+    def attributions(self) -> list[dict[str, str]]:
+        """Third-party attributions required by this specific report's provenance.
+
+        fastText lid.176 is licensed CC-BY-SA-3.0, so any report whose language
+        counts were produced by it is a derivative work and must carry the notice.
+        Reports that fell back to langdetect (Apache-2.0) need no entry here.
+        """
+        items: list[dict[str, str]] = []
+        if self.used_fasttext():
+            items.append(
+                {
+                    "component": "fastText lid.176 language identification model",
+                    "license": "CC-BY-SA-3.0",
+                    "url": "https://fasttext.cc/docs/en/language-identification.html",
+                    "note": (
+                        "Language counts in this report were produced with the "
+                        "fastText lid.176 model, licensed CC-BY-SA-3.0. This report "
+                        "is a derivative work and carries the same license for those "
+                        "figures."
+                    ),
+                }
+            )
+        return items
 
     def to_findings(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -66,6 +106,9 @@ class ReportData:
             "notes": self.notes,
             "columns": [r.to_dict() for r in self.results],
         }
+        attributions = self.attributions()
+        if attributions:
+            out["attributions"] = attributions
         if self.insight_bundle is not None:
             out["insights"] = self.insight_bundle.to_dict()
         return out
@@ -194,6 +237,8 @@ def assemble(
         mat = np.vstack([np.asarray(r.extras["sample"][:max_len]) for r in numeric])
         corr = np.corrcoef(mat)
         labels = [r.column for r in numeric]
+        data.correlation_matrix = corr.tolist()
+        data.correlation_labels = labels
         data.correlation_chart_html = correlation_heatmap(
             corr.tolist(), labels
         )
@@ -206,9 +251,36 @@ def render_html(data: ReportData, output_path: Path) -> Path:
     tmpl = env.get_template("report.html.j2")
     charts: dict[str, str | None] = {r.column: chart_for(r) for r in data.results}
 
+    # WCAG 2.2 AA: pair every Plotly figure with a screen-reader-friendly data
+    # table. Reuses the same builders the live viewer uses (viewer/chart_fallback).
+    from .viewer.chart_fallback import (
+        column_data_table,
+        correlation_data_table,
+        language_data_table,
+        overview_data_table,
+    )
+
+    col_dicts = [r.to_dict() for r in data.results]
+    chart_tables: dict[str, dict | None] = {
+        r.column: column_data_table(d) for r, d in zip(data.results, col_dicts)
+    }
+    overview_table = overview_data_table(col_dicts) if data.overview_chart_html else None
+    language_table = (
+        language_data_table(data.language_counts) if data.language_chart_html else None
+    )
+    correlation_table = (
+        correlation_data_table(data.correlation_matrix, data.correlation_labels)
+        if data.correlation_chart_html
+        else None
+    )
+
     html = tmpl.render(
         data=data,
         charts=charts,
+        chart_tables=chart_tables,
+        overview_table=overview_table,
+        language_table=language_table,
+        correlation_table=correlation_table,
         version=__version__,
     )
     output_path.write_text(html, encoding="utf-8")

@@ -59,6 +59,42 @@ class CompareReport:
     generated_at: str = ""
     insight_bundle: "InsightBundle | None" = None
 
+    def used_fasttext(self) -> bool:
+        """True when either side's language counts came from fastText lid.176."""
+        for c in self.columns:
+            for side in (c.a, c.b):
+                if side is None:
+                    continue
+                lc = side.extras.get("language_counts")
+                if isinstance(lc, dict):
+                    engine = lc.get("__engine", "")
+                    if isinstance(engine, str) and engine.startswith("fasttext"):
+                        return True
+        return False
+
+    def attributions(self) -> list[dict[str, str]]:
+        """Third-party attributions required by this comparison's provenance.
+
+        fastText lid.176 is CC-BY-SA-3.0; a comparison whose language counts came
+        from it is a derivative work for those figures.
+        """
+        items: list[dict[str, str]] = []
+        if self.used_fasttext():
+            items.append(
+                {
+                    "component": "fastText lid.176 language identification model",
+                    "license": "CC-BY-SA-3.0",
+                    "url": "https://fasttext.cc/docs/en/language-identification.html",
+                    "note": (
+                        "Language counts in this comparison were produced with the "
+                        "fastText lid.176 model, licensed CC-BY-SA-3.0. The report is "
+                        "a derivative work and carries the same license for those "
+                        "figures."
+                    ),
+                }
+            )
+        return items
+
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "a": self.a.to_dict(),
@@ -67,6 +103,9 @@ class CompareReport:
             "divergences": self.divergence_summary(),
             "generated_at": self.generated_at,
         }
+        attributions = self.attributions()
+        if attributions:
+            out["attributions"] = attributions
         if self.insight_bundle is not None:
             out["insights"] = self.insight_bundle.to_dict()
         return out

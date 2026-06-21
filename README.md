@@ -111,6 +111,28 @@ On compare mode the insight pass walks the top-K most divergent columns (ranked 
 
 Requires `~/shared/llm_providers` on `PYTHONPATH` (the unified provider gateway). Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
 
+## Data handling
+
+The stats pass is entirely local. Nothing leaves your machine unless you pass `--llm`.
+
+When the insight pass runs, saturn sends a compact per-column projection to the provider you chose. That projection is the same surface a reader already sees in the JSON sidecar: row counts, null rates, distinct counts, numeric stats, the language mix, and by default the column's most frequent values and words. Saturn never sends raw rows, and it never sends a column's full contents. Each forwarded value is truncated to 200 bytes so one long-text column cannot balloon the request.
+
+Those top values and words are still literal cell contents, so on a dataset with names, handles, free text, or anything else sensitive (PII/PHI under HIPAA, GDPR, or FERPA), they can carry identifying data. Two ways to withhold them:
+
+```bash
+# per run: send only aggregates, no literal cell values
+saturn analyze data.csv --llm anthropic --no-evidence-values
+
+# deployment-wide: force redaction without threading a flag through every form
+export SATURN_REDACT_EVIDENCE_VALUES=1
+```
+
+With redaction on, counts, stats, and the language mix still go to the model; only the verbatim values and words are held back.
+
+The destination is whichever provider you name in `--llm`. Through `~/shared/llm_providers` that can be any of: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
+
+Language detection is local in every mode. When the fastText `lid.176` model is present, saturn uses it and stamps a CC-BY-SA-3.0 attribution into the report footer and the JSON sidecar (`attributions` key), because language counts produced by `lid.176` are a derivative work. See [NOTICE](NOTICE).
+
 ## Status
 
 All shipping:
@@ -132,4 +154,6 @@ On the roadmap: Phase 3 (BERTopic clustering via `[nlp]` extra), SSE progress fo
 
 ## License
 
-MIT. © Luke Steuber.
+MIT. © Luke Steuber. Full text in [LICENSE](LICENSE).
+
+Third-party dependency attributions are in [NOTICE](NOTICE). One runtime asset carries its own terms: the optional fastText `lid.176` language model is CC-BY-SA-3.0, so any report whose language counts came from it is a derivative work for those figures and carries that license (stamped into the report footer and the JSON `attributions` key).

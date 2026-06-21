@@ -10,6 +10,7 @@ from typing import Any
 
 from ..compare import ColumnComparison, CompareReport
 from ..profilers import ProfileResult
+from .evidence import project_stats, redact_values_from_env
 
 
 def _prune_lang(counts: dict[str, int] | None) -> dict[str, int]:
@@ -21,12 +22,15 @@ def _prune_lang(counts: dict[str, int] | None) -> dict[str, int]:
 def _side_payload(label: str, p: ProfileResult | None) -> dict[str, Any] | None:
     if p is None:
         return None
+    # Compare has no --no-evidence-values flag, so it honors the deployment-wide
+    # env switch; the byte cap on literal stat values applies regardless.
+    redact = redact_values_from_env()
     ev: dict[str, Any] = {
         "label": label,
         "n": p.n,
         "null_rate": round(p.null_rate, 4),
         "n_unique": p.n_unique,
-        "stats": dict(p.stats),
+        "stats": project_stats(p.stats, redact_values=redact),
         "alerts": [a.code for a in p.alerts],
     }
     langs = _prune_lang(p.extras.get("language_counts"))

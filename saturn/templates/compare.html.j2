@@ -209,6 +209,15 @@
 
   <footer>
     Saturn v{{ version }} · compare mode · {{ report.a.label }} ({{ report.a.row_count | num }}) vs {{ report.b.label }} ({{ report.b.row_count | num }}).
+    {% set attributions = report.attributions() %}
+    {% if attributions %}
+    <p class="muted">
+      {% for a in attributions %}
+        {{ a.component }} ({{ a.license }}). {{ a.note }}
+        {% if a.url %}<a href="{{ a.url }}">{{ a.url }}</a>{% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
   </footer>
 </main>
 </body>

@@ -35,6 +35,12 @@ def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
     assert "author_handle" in html
     # plotly CDN injected via template
     assert "plotly" in html.lower()
+    # WCAG 2.2 AA: every Plotly figure ships a <details>Show data table</details>
+    # companion in the standalone export, not just the live viewer.
+    n_figs = html.count("plotly-graph-div")
+    n_tables = html.count("Show data table")
+    assert n_figs >= 1
+    assert n_tables >= n_figs, f"{n_tables} fallback tables for {n_figs} figures"
 
     findings = json.loads(findings_path.read_text())
     assert findings["meta"]["source"] == "test://tiny"

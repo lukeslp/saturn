@@ -1,0 +1,79 @@
+saturn (PyPI: saturn-dissect)
+Copyright (c) 2026 Luke Steuber
+Licensed under the MIT License (see LICENSE).
+
+This product includes third-party open-source software. The components below
+are dependencies of saturn; each remains under its own license, and the
+copyright stays with its respective authors. This NOTICE satisfies the
+attribution requirements of the permissive licenses (Apache-2.0, BSD, MIT,
+MPL, PSF) under which they are distributed.
+
+To regenerate the dependency inventory:
+
+    pip install pip-licenses
+    pip-licenses --format=markdown --order=license --with-urls
+
+
+================================================================================
+Data / model assets (attribution required at report time)
+================================================================================
+
+fastText lid.176 language identification model
+  License: CC-BY-SA-3.0
+  https://fasttext.cc/docs/en/language-identification.html
+  Saturn downloads and runs this model only when present in the cache (the
+  optional language-detection upgrade). Any saturn report whose language counts
+  were produced by lid.176 is a derivative work for those figures and carries
+  the same CC-BY-SA-3.0 license. Saturn stamps that attribution into the report
+  footer and into an "attributions" key in the JSON findings sidecar whenever
+  the fastText engine ran. Reports that fall back to langdetect (Apache-2.0)
+  carry no such obligation.
+
+
+================================================================================
+Python dependencies, grouped by license
+================================================================================
+
+Apache License 2.0
+  datasets, huggingface_hub, hf-xet, langdetect, nltk, requests, bleach,
+  multidict, aiosignal, async-timeout, distro, propcache, frozenlist, yarl,
+  pyarrow, pytest-asyncio, tzdata, regex (Apache-2.0 AND CNRI-Python),
+  aiohttp (Apache-2.0 AND MIT), packaging (Apache-2.0 OR BSD-2-Clause),
+  python-dateutil (Apache-2.0 AND BSD), pyjson5 (Apache-2.0 AND MIT),
+  sniffio (Apache-2.0 AND MIT)
+
+BSD License (2-Clause / 3-Clause)
+  pandas, numpy, scipy, Jinja2, Flask, Werkzeug, click, MarkupSafe, Markdown,
+  Pygments, itsdangerous, httpx, httpcore, idna, joblib, fsspec, nbformat,
+  fastjsonschema, traitlets, jupyter_core, pybind11, webencodings, xlsxwriter,
+  xxhash, dill, multiprocess
+
+MIT License
+  typer, rich, plotly, polars, duckdb, anthropic, openai, pydantic,
+  pydantic_core, textstat, fasttext-wheel, fastexcel, openpyxl, et_xmlfile,
+  narwhals, gunicorn, attrs, anyio, urllib3, charset-normalizer, filelock,
+  jsonschema, jsonschema-specifications, referencing, rpds-py, jiter,
+  markdown-it-py, mdurl, blinker, h11, six, pytz, PyYAML, pluggy, iniconfig,
+  platformdirs, exceptiongroup, docstring_parser, annotated-types,
+  typing-inspection, pytest
+
+Mozilla Public License 2.0 (MPL-2.0)
+  certifi, tqdm (MPL-2.0 AND MIT)
+
+Python Software Foundation License (PSF / PSF-2.0)
+  typing_extensions, aiohappyeyeballs, backports.asyncio.runner
+
+ISC License
+  shellingham
+
+
+================================================================================
+Weak-copyleft component (disjunctive license; used under the permissive option)
+================================================================================
+
+pyphen
+  Triple-licensed GPL-2.0-or-later / LGPL-2.1-or-later / MPL-1.1.
+  Pulled in transitively by textstat. Saturn uses it unmodified, as an
+  installed dependency (no static linking, no source modification), under the
+  LGPL-2.1 / MPL-1.1 terms of the disjunction. No GPL obligation attaches to
+  saturn itself.

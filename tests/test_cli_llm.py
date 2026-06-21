@@ -108,8 +108,9 @@ def test_analyze_accepts_multiple_llm_specs_for_catfish(tmp_path):
 
     seen = {}
 
-    def _capture(report, *, specs, api_keys):
+    def _capture(report, *, specs, api_keys, redact_values=False, **kwargs):
         seen["specs"] = specs
+        seen["redact_values"] = redact_values
         return _fake_bundle()
 
     with patch("saturn.cli.run_insights", side_effect=_capture), \

@@ -151,3 +151,56 @@ def test_run_insights_critic_error_does_not_drop_primary_insight():
     assert len(bundle.insights) == 2
     # Critic failures recorded
     assert any("critic 500" in e["message"] for e in bundle.errors)
+
+
+def _mk_wide_report(n_good=3, n_junk=40):
+    """A report with n_good informative cols and n_junk all-null 'Unnamed' cols."""
+    results = []
+    for i in range(n_good):
+        results.append(ProfileResult(column=f"good{i}", kind="text", n=100, n_null=0,
+                                     n_unique=90, stats={}, extras={}, alerts=[]))
+    for i in range(n_junk):
+        results.append(ProfileResult(column=f"Unnamed: {i}", kind="categorical", n=100,
+                                     n_null=100, n_unique=0, stats={}, extras={}, alerts=[]))
+    schema = {r.column: r.kind for r in results}
+    return assemble(source="wide", row_count=100, sampled_rows=100, seed=0,
+                    schema=schema, results=results, mode="full")
+
+
+def test_run_insights_skips_near_empty_columns_then_caps():
+    resp = ('{"narrative": "x", "confidence": "high", "evidence_keys": []}', {})
+    report = _mk_wide_report(n_good=3, n_junk=40)
+    calls = {"n": 0}
+
+    def _count(spec, *, system, user, api_key, **kw):
+        calls["n"] += 1
+        return resp
+
+    with patch("saturn.llm.engine.call_provider", side_effect=_count):
+        bundle = run_insights(
+            report,
+            specs=[ProviderSpec("anthropic")],
+            api_keys={"anthropic": "sk"},
+            max_columns=40,
+            skip_null_rate=0.95,
+        )
+    col_targets = {i.target for i in bundle.insights if i.scope == "column"}
+    # only the 3 informative columns get a per-column insight; 40 junk skipped
+    assert col_targets == {"good0", "good1", "good2"}
+    # 1 dataset call + 3 column calls
+    assert calls["n"] == 1 + 3
+
+
+def test_run_insights_caps_many_good_columns():
+    resp = ('{"narrative": "x", "confidence": "high", "evidence_keys": []}', {})
+    report = _mk_wide_report(n_good=100, n_junk=0)
+    calls = {"n": 0}
+
+    def _count(spec, *, system, user, api_key, **kw):
+        calls["n"] += 1
+        return resp
+
+    with patch("saturn.llm.engine.call_provider", side_effect=_count):
+        run_insights(report, specs=[ProviderSpec("anthropic")],
+                     api_keys={"anthropic": "sk"}, max_columns=40)
+    assert calls["n"] == 1 + 40  # dataset + capped columns

@@ -87,6 +87,101 @@ def test_dataset_evidence_summarises_whole_report():
     assert ev["columns"][0]["column"] in {"alt_text", "cursor"}
 
 
+def test_column_evidence_redacts_literal_values():
+    report = _mk_report()
+    ev = column_evidence(report, "alt_text", redact_values=True)
+    # aggregates survive, literal user strings are withheld
+    assert ev["language_counts"] == {"en": 900, "es": 50}
+    assert ev["stats"]["len_mean"] == 201.3
+    assert "top_words" not in ev
+    assert "top_values" not in ev
+
+
+def test_dataset_evidence_redact_flag_propagates():
+    report = _mk_report()
+    ev = dataset_evidence(report, redact_values=True)
+    for col in ev["columns"]:
+        assert "top_values" not in col
+        assert "top_words" not in col
+
+
+def test_top_values_byte_capped():
+    long_val = "x" * 5000
+    results = [
+        ProfileResult(
+            column="blob",
+            kind="categorical",
+            n=10,
+            n_null=0,
+            n_unique=2,
+            stats={},
+            extras={"top_values": [(long_val, 7), ("short", 3)]},
+            alerts=[],
+        ),
+    ]
+    report = assemble(
+        source="s", row_count=10, sampled_rows=10, seed=0,
+        schema={"blob": "categorical"}, results=results, mode="full",
+    )
+    ev = column_evidence(report, "blob")
+    capped_label = ev["top_values"][0][0]
+    # 200 content bytes + the 3-byte UTF-8 ellipsis marker
+    assert len(capped_label.encode("utf-8")) <= 203
+    assert capped_label.endswith("…")
+    # short values pass through untouched, preserving the tuple shape
+    assert ev["top_values"][1] == ("short", 3)
+
+
+def test_short_top_words_unchanged_after_byte_cap():
+    # regression guard: low-cardinality columns keep their exact prior shape
+    report = _mk_report()
+    ev = column_evidence(report, "alt_text")
+    assert ev["top_words"] == [("the", 500), ("and", 300)]
+
+
+def test_redaction_withholds_categorical_top_value():
+    # regression: stats["top_value"] is a literal cell value and must not leak
+    results = [
+        ProfileResult(
+            column="author",
+            kind="categorical",
+            n=100,
+            n_null=0,
+            n_unique=5,
+            stats={"top_value": "alice@example.com", "entropy": 1.2},
+            extras={"top_values": [("alice@example.com", 60), ("bob", 40)]},
+            alerts=[],
+        ),
+    ]
+    report = assemble(
+        source="s", row_count=100, sampled_rows=100, seed=0,
+        schema={"author": "categorical"}, results=results, mode="full",
+    )
+    ev = column_evidence(report, "author", redact_values=True)
+    assert "top_value" not in ev["stats"]  # literal value withheld
+    assert ev["stats"]["entropy"] == 1.2   # aggregate survives
+    assert "top_values" not in ev
+    # without redaction the value is present (and byte-capped, but short here)
+    ev_open = column_evidence(report, "author")
+    assert ev_open["stats"]["top_value"] == "alice@example.com"
+
+
+def test_long_categorical_top_value_byte_capped():
+    big = "z" * 4000
+    results = [
+        ProfileResult(
+            column="blob", kind="categorical", n=10, n_null=0, n_unique=1,
+            stats={"top_value": big}, extras={}, alerts=[],
+        ),
+    ]
+    report = assemble(
+        source="s", row_count=10, sampled_rows=10, seed=0,
+        schema={"blob": "categorical"}, results=results, mode="full",
+    )
+    ev = column_evidence(report, "blob")
+    assert len(ev["stats"]["top_value"].encode("utf-8")) <= 203
+
+
 def test_dataset_evidence_ranks_by_interestingness():
     # Two columns, same alert count, one has higher null rate → null wins
     results = [
