@@ -260,3 +260,53 @@ def test_xlsx_source_includes_chosen_sheet(tmp_path):
     a = FileAdapter(path, sheet="details")
     a.load_dataframe()
     assert a.source.endswith("#details")
+
+
+# ---------- GeoJSON --------------------------------------------------------
+
+
+def test_geojson_feature_collection_flattens_to_rows(tmp_path):
+    import json
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature",
+             "properties": {"name": "A", "pop": 100, "tags": ["x", "y"]},
+             "geometry": {"type": "Polygon", "coordinates": [[[0, 0]]]}},
+            {"type": "Feature",
+             "properties": {"name": "B", "pop": 200},
+             "geometry": {"type": "Point", "coordinates": [1, 1]}},
+        ],
+    }
+    path = tmp_path / "regions.geojson"
+    path.write_text(json.dumps(fc))
+
+    adapter = adapter_for(str(path))
+    assert isinstance(adapter, FileAdapter)
+    df = adapter.load_dataframe()
+    assert df.height == 2
+    # properties + synthetic geometry_type; nested list is JSON-stringified
+    assert "name" in df.columns and "pop" in df.columns
+    assert "geometry_type" in df.columns
+    assert set(df["geometry_type"].to_list()) == {"Polygon", "Point"}
+    schema = adapter.schema()
+    assert "geometry_type" in schema.columns
+
+
+# ---------- heterogeneous JSON array ---------------------------------------
+
+
+def test_json_array_with_heterogeneous_keys(tmp_path):
+    import json
+    # Late record carries an extra key absent from the first records.
+    records = [{"a": i, "b": "x"} for i in range(50)]
+    records.append({"a": 51, "b": "y", "cargo": "extra"})
+    path = tmp_path / "het.json"
+    path.write_text(json.dumps(records))
+
+    adapter = adapter_for(str(path))
+    df = adapter.load_dataframe()
+    assert df.height == 51
+    assert "cargo" in df.columns
+    schema = adapter.schema()
+    assert "a" in schema.columns and "cargo" in schema.columns

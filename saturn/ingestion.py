@@ -393,9 +393,14 @@ class FileAdapter(SourceAdapter):
         if ext == ".csv":
             return f"SELECT * FROM read_csv_auto('{self.path}')"
         if ext in {".jsonl", ".ndjson"}:
-            return f"SELECT * FROM read_json_auto('{self.path}', format='newline_delimited')"
+            return (
+                f"SELECT * FROM read_json_auto('{self.path}', "
+                "format='newline_delimited', union_by_name=true)"
+            )
         if ext == ".json":
-            return f"SELECT * FROM read_json_auto('{self.path}')"
+            # union_by_name lets DuckDB read arrays whose objects carry
+            # different key sets (heterogeneous records) instead of erroring.
+            return f"SELECT * FROM read_json_auto('{self.path}', union_by_name=true)"
         if ext in {".db", ".sqlite", ".sqlite3"}:
             con = self._conn()
             con.execute("INSTALL sqlite; LOAD sqlite;")
@@ -494,6 +499,35 @@ class FileAdapter(SourceAdapter):
             return FileAdapter._resolve_sheet(int(spec), names)
         return spec  # let _load_with_polars raise with the available list
 
+    def _load_geojson(self) -> "pl.DataFrame":
+        """Flatten a GeoJSON FeatureCollection to one row per feature.
+
+        Columns are the union of feature `properties` keys plus a synthetic
+        `geometry_type` (Point/Polygon/...). Geometry coordinates are dropped —
+        they're not tabular-profiling material. Nested property values are
+        JSON-stringified so each column stays scalar.
+        """
+        import json as _json
+
+        import polars as pl
+
+        data = _json.loads(self.path.read_text(encoding="utf-8"))
+        features = data.get("features") if isinstance(data, dict) else None
+        if not isinstance(features, list) or not features:
+            raise ValueError(f"no GeoJSON features in {self.path.name}")
+        rows: list[dict[str, Any]] = []
+        for ft in features:
+            if not isinstance(ft, dict):
+                continue
+            props = dict(ft.get("properties") or {})
+            for k, v in list(props.items()):
+                if isinstance(v, (list, dict)):
+                    props[k] = _json.dumps(v, ensure_ascii=False)
+            geom = ft.get("geometry") or {}
+            props["geometry_type"] = geom.get("type") if isinstance(geom, dict) else None
+            rows.append(props)
+        return pl.DataFrame(rows, infer_schema_length=min(5000, len(rows)))
+
     def list_sheets(self) -> list[str] | None:
         """For Excel-family files: return all sheet names. None for other types."""
         ext = self.path.suffix.lower()
@@ -507,14 +541,21 @@ class FileAdapter(SourceAdapter):
     def schema(self) -> Schema:
         if self._schema is not None:
             return self._schema
-        if self.path.suffix.lower() in self._POLARS_DIRECT:
+        if self.path.suffix.lower() in self._POLARS_DIRECT or self.path.suffix.lower() == ".geojson":
             # No cheap streaming schema for these — load fully and infer.
             self.load_dataframe()
             return self._schema
         con = self._conn()
-        sample_rows = con.execute(f"{self._scan_sql()} LIMIT 200").fetch_df().to_dict("records")
-        self._schema = _infer_schema_from_sample(sample_rows)
-        return self._schema
+        try:
+            sample_rows = con.execute(f"{self._scan_sql()} LIMIT 200").fetch_df().to_dict("records")
+            self._schema = _infer_schema_from_sample(sample_rows)
+            return self._schema
+        except Exception:
+            # DuckDB can't cheaply sample this file (e.g. a JSON array with
+            # heterogeneous record schemas). Fall back to the robust eager
+            # loader, which sets self._schema as a side effect.
+            self.load_dataframe()
+            return self._schema
 
     def load_dataframe(self) -> "pl.DataFrame":
         import polars as pl
@@ -529,6 +570,8 @@ class FileAdapter(SourceAdapter):
             # ValueError shouldn't be replaced by a confusing "Unsupported
             # file type" from the fallback path.
             df = _ensure_frame(self._load_with_polars())
+        elif ext == ".geojson":
+            df = self._load_geojson()
         else:
             try:
                 if ext == ".parquet":
@@ -538,7 +581,16 @@ class FileAdapter(SourceAdapter):
                 elif ext in {".jsonl", ".ndjson"}:
                     df = pl.read_ndjson(self.path)
                 elif ext == ".json":
-                    df = pl.read_json(self.path)
+                    # infer_schema_length=None scans the whole array so a late
+                    # record with an extra key doesn't break inference.
+                    try:
+                        df = pl.read_json(self.path, infer_schema_length=None)
+                    except Exception:
+                        import json as _json
+                        raw = _json.loads(self.path.read_text(encoding="utf-8"))
+                        if not isinstance(raw, list):
+                            raise
+                        df = pl.DataFrame(raw, infer_schema_length=None)
                 else:
                     # SQLite (and fallback): go through DuckDB's arrow export
                     tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
@@ -554,7 +606,7 @@ class FileAdapter(SourceAdapter):
         return df
 
     def iter_batches(self, batch_size: int = 10_000) -> Iterator[list[dict[str, Any]]]:
-        if self.path.suffix.lower() in self._POLARS_DIRECT:
+        if self.path.suffix.lower() in self._POLARS_DIRECT or self.path.suffix.lower() == ".geojson":
             # Eagerly-loaded formats: chunk the cached dict list.
             records = self.load_dataframe().to_dicts()
             for i in range(0, len(records), batch_size):
