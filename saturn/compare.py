@@ -116,6 +116,15 @@ class CompareReport:
             out["insights"] = self.insight_bundle.to_dict()
         return out
 
+    def to_contract_v1(self) -> dict[str, Any]:
+        """Return the stable cross-language contract without changing legacy JSON."""
+        from . import __version__
+        from .core import migrate_legacy, validate_contract
+
+        payload = migrate_legacy({"saturn_version": __version__, **self.to_dict()})
+        validate_contract(payload)
+        return payload
+
     def divergence_summary(self, k: int = 6) -> list[dict[str, Any]]:
         """Return the top-K columns ranked by a composite divergence score.
 

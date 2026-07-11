@@ -123,6 +123,14 @@ class ReportData:
             }
         return out
 
+    def to_contract_v1(self) -> dict[str, Any]:
+        """Return the stable cross-language contract without changing legacy JSON."""
+        from .core import migrate_legacy, validate_contract
+
+        payload = migrate_legacy(self.to_findings())
+        validate_contract(payload)
+        return payload
+
     @classmethod
     def from_findings(cls, payload: dict[str, Any]) -> "ReportData":
         """Rebuild a ReportData from a findings JSON payload.

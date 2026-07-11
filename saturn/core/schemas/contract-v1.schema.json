@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saturn.lukesteuber.com/schemas/contract-v1.schema.json",
+  "title": "Saturn findings contract v1",
+  "type": "object",
+  "required": ["contractVersion", "kind", "provenance", "options", "engine"],
+  "properties": {
+    "contractVersion": {"const": 1},
+    "kind": {"enum": ["dataset_profile", "dataset_comparison"]},
+    "provenance": {"type": "object"},
+    "options": {"type": "object"},
+    "engine": {"type": "object"},
+    "extensions": {"type": "object"}
+  },
+  "oneOf": [
+    {"properties": {"kind": {"const": "dataset_profile"}}, "required": ["descriptor", "columns"]},
+    {"properties": {"kind": {"const": "dataset_comparison"}}, "required": ["sides", "columns"]}
+  ],
+  "additionalProperties": true
+}
