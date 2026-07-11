@@ -2,19 +2,212 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saturn.lukesteuber.com/schemas/contract-v1.schema.json",
   "title": "Saturn findings contract v1",
+  "$defs": {
+    "columnKind": {
+      "enum": ["numeric", "text", "categorical", "boolean", "unknown"]
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "alert": {
+      "type": "object",
+      "required": ["level", "code", "message"],
+      "properties": {
+        "level": {"enum": ["info", "warn", "error"]},
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$"
+        },
+        "message": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "descriptor": {
+      "type": "object",
+      "required": ["source", "rowCount", "schema"],
+      "properties": {
+        "source": {"type": "string"},
+        "rowCount": {
+          "oneOf": [
+            {"$ref": "#/$defs/nonNegativeInteger"},
+            {"type": "null"}
+          ]
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/columnKind"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "side": {
+      "type": "object",
+      "required": ["label", "source", "rowCount", "schema"],
+      "properties": {
+        "label": {"type": "string"},
+        "source": {"type": "string"},
+        "rowCount": {
+          "oneOf": [
+            {"$ref": "#/$defs/nonNegativeInteger"},
+            {"type": "null"}
+          ]
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/columnKind"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "columnProfile": {
+      "type": "object",
+      "required": [
+        "name", "kind", "count", "nullCount", "uniqueCount", "nullRate",
+        "stats", "details", "alerts"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "kind": {"$ref": "#/$defs/columnKind"},
+        "count": {"$ref": "#/$defs/nonNegativeInteger"},
+        "nullCount": {"$ref": "#/$defs/nonNegativeInteger"},
+        "uniqueCount": {
+          "oneOf": [
+            {"$ref": "#/$defs/nonNegativeInteger"},
+            {"type": "null"}
+          ]
+        },
+        "nullRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "stats": {"type": "object"},
+        "details": {"type": "object"},
+        "alerts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/alert"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "correlations": {
+      "type": "object",
+      "required": ["labels", "values", "pairCounts"],
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "oneOf": [{"type": "number"}, {"type": "null"}]
+            }
+          }
+        },
+        "pairCounts": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/nonNegativeInteger"}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparisonColumn": {
+      "type": "object",
+      "required": ["name", "sideKinds", "compatible", "profiles", "delta", "notes"],
+      "properties": {
+        "name": {"type": "string"},
+        "sideKinds": {
+          "type": "object",
+          "required": ["a", "b"],
+          "properties": {
+            "a": {"oneOf": [{"$ref": "#/$defs/columnKind"}, {"type": "null"}]},
+            "b": {"oneOf": [{"$ref": "#/$defs/columnKind"}, {"type": "null"}]}
+          },
+          "additionalProperties": false
+        },
+        "compatible": {"type": "boolean"},
+        "profiles": {
+          "type": "object",
+          "required": ["a", "b"],
+          "properties": {
+            "a": {"oneOf": [{"$ref": "#/$defs/columnProfile"}, {"type": "null"}]},
+            "b": {"oneOf": [{"$ref": "#/$defs/columnProfile"}, {"type": "null"}]}
+          },
+          "additionalProperties": false
+        },
+        "delta": {"type": "object"},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    }
+  },
   "type": "object",
-  "required": ["contractVersion", "kind", "provenance", "options", "engine"],
+  "required": [
+    "contractVersion", "kind", "provenance", "options", "engine", "columns", "alerts"
+  ],
   "properties": {
     "contractVersion": {"const": 1},
     "kind": {"enum": ["dataset_profile", "dataset_comparison"]},
-    "provenance": {"type": "object"},
-    "options": {"type": "object"},
-    "engine": {"type": "object"},
-    "extensions": {"type": "object"}
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "generatedAt": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string"},
+        "sampledRows": {"$ref": "#/$defs/nonNegativeInteger"},
+        "seed": {"$ref": "#/$defs/nonNegativeInteger"}
+      },
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "columns": {"type": "array"},
+    "alerts": {"type": "array", "items": {"$ref": "#/$defs/alert"}},
+    "extensions": {"type": "object"},
+    "descriptor": {"$ref": "#/$defs/descriptor"},
+    "correlations": {"$ref": "#/$defs/correlations"},
+    "sides": {
+      "type": "object",
+      "required": ["a", "b"],
+      "properties": {
+        "a": {"$ref": "#/$defs/side"},
+        "b": {"$ref": "#/$defs/side"}
+      },
+      "additionalProperties": false
+    }
   },
   "oneOf": [
-    {"properties": {"kind": {"const": "dataset_profile"}}, "required": ["descriptor", "columns"]},
-    {"properties": {"kind": {"const": "dataset_comparison"}}, "required": ["sides", "columns"]}
+    {
+      "properties": {
+        "kind": {"const": "dataset_profile"},
+        "columns": {"items": {"$ref": "#/$defs/columnProfile"}}
+      },
+      "required": ["descriptor"],
+      "not": {"required": ["sides"]}
+    },
+    {
+      "properties": {
+        "kind": {"const": "dataset_comparison"},
+        "columns": {"items": {"$ref": "#/$defs/comparisonColumn"}}
+      },
+      "required": ["sides"],
+      "not": {"anyOf": [{"required": ["descriptor"]}, {"required": ["correlations"]}]}
+    }
   ],
-  "additionalProperties": true
+  "additionalProperties": false
 }
