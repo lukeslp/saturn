@@ -163,6 +163,66 @@ def test_backfill_happy_path(client, tmp_path, monkeypatch):
     assert api_key is None
 
 
+@pytest.mark.parametrize("persisted_metadata", [True, False])
+def test_backfill_preserves_schema_drift_through_rehydrate_and_rewrite(
+    tmp_path, monkeypatch, persisted_metadata
+):
+    import polars as pl
+
+    from saturn.compare import compare_dataframes
+    from saturn.insights import InsightBundle
+    from saturn.llm.compare_evidence import compare_column_evidence
+    from saturn.viewer.runner import backfill_insights
+
+    original = compare_dataframes(
+        pl.DataFrame({"value": [1, 2, 3]}),
+        pl.DataFrame({"value": ["one", "two", "three"]}),
+        label_a="numeric",
+        label_b="text",
+        source_a="test://numeric",
+        source_b="test://text",
+        schema_a={"value": "numeric"},
+        schema_b={"value": "text"},
+    ).to_dict()
+    if not persisted_metadata:
+        original["columns"][0].pop("kind_a")
+        original["columns"][0].pop("kind_b")
+        original["columns"][0].pop("compatible")
+    path = tmp_path / "drift.json"
+    path.write_text(json.dumps(original))
+    captured = {}
+
+    monkeypatch.setattr(
+        "saturn.llm.keys.load_api_keys", lambda providers: {"anthropic": "key"}
+    )
+
+    def fake_run(report, **kwargs):
+        column = report.columns[0]
+        captured["compatible"] = column.compatible
+        captured["divergences"] = report.divergence_summary(k=1)
+        captured["evidence"] = compare_column_evidence(
+            column, a_label=report.a.label, b_label=report.b.label
+        )
+        return InsightBundle(providers=["anthropic"])
+
+    monkeypatch.setattr("saturn.llm.engine.run_compare_insights", fake_run)
+
+    backfill_insights("job", tmp_path, "drift", "anthropic")
+
+    rewritten = json.loads(path.read_text())
+    column = rewritten["columns"][0]
+    assert column["kind_a"] == "numeric"
+    assert column["kind_b"] == "text"
+    assert column["compatible"] is False
+    assert captured["compatible"] is False
+    assert captured["divergences"][0]["signals"] == [
+        "schema drift: numeric → text"
+    ]
+    assert captured["evidence"]["kind_a"] == "numeric"
+    assert captured["evidence"]["kind_b"] == "text"
+    assert captured["evidence"]["compatible"] is False
+
+
 # ---------- job status -------------------------------------------------------
 
 

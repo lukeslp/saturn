@@ -177,6 +177,15 @@ def backfill_insights(
             b_pr = ReportData.from_findings(
                 {"meta": {}, "schema": {}, "columns": [c["b"]] if c.get("b") else []}
             ).results[:1]
+            kind_a = c.get("kind_a", a_pr[0].kind if a_pr else None)
+            kind_b = c.get("kind_b", b_pr[0].kind if b_pr else None)
+            compatible = c.get("compatible")
+            if compatible is None:
+                compatible = (
+                    kind_a == kind_b
+                    if kind_a is not None and kind_b is not None
+                    else True
+                )
             columns.append(
                 ColumnComparison(
                     column=c["column"],
@@ -185,6 +194,9 @@ def backfill_insights(
                     b=b_pr[0] if b_pr else None,
                     delta=c.get("delta", {}) or {},
                     notes=c.get("notes", []) or [],
+                    kind_a=kind_a,
+                    kind_b=kind_b,
+                    compatible=compatible,
                 )
             )
         report = CompareReport(
