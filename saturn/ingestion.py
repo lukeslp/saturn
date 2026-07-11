@@ -387,20 +387,26 @@ class FileAdapter(SourceAdapter):
     _POLARS_DIRECT = {".xlsx", ".xls", ".xlsb", ".ods", ".tsv", ".feather", ".arrow"}
 
     def _scan_sql(self) -> str:
+        def literal(value: object) -> str:
+            return "'" + str(value).replace("'", "''") + "'"
+
+        def identifier(value: object) -> str:
+            return '"' + str(value).replace('"', '""') + '"'
+
         ext = self.path.suffix.lower()
         if ext == ".parquet":
-            return f"SELECT * FROM read_parquet('{self.path}')"
+            return f"SELECT * FROM read_parquet({literal(self.path)})"
         if ext == ".csv":
-            return f"SELECT * FROM read_csv_auto('{self.path}')"
+            return f"SELECT * FROM read_csv_auto({literal(self.path)})"
         if ext in {".jsonl", ".ndjson"}:
             return (
-                f"SELECT * FROM read_json_auto('{self.path}', "
+                f"SELECT * FROM read_json_auto({literal(self.path)}, "
                 "format='newline_delimited', union_by_name=true)"
             )
         if ext == ".json":
             # union_by_name lets DuckDB read arrays whose objects carry
             # different key sets (heterogeneous records) instead of erroring.
-            return f"SELECT * FROM read_json_auto('{self.path}', union_by_name=true)"
+            return f"SELECT * FROM read_json_auto({literal(self.path)}, union_by_name=true)"
         if ext in {".db", ".sqlite", ".sqlite3"}:
             con = self._conn()
             con.execute("INSTALL sqlite; LOAD sqlite;")
@@ -408,7 +414,7 @@ class FileAdapter(SourceAdapter):
             # _scan_sql(), and DuckDB rejects re-attaching a name that's
             # already there. DETACH first to keep this side-effect-free.
             con.execute("DETACH DATABASE IF EXISTS s;")
-            con.execute(f"ATTACH '{self.path}' AS s (TYPE sqlite);")
+            con.execute(f"ATTACH {literal(self.path)} AS s (TYPE sqlite);")
             table = self.table
             if table is None:
                 # Newer DuckDB-SQLite extensions expose the catalog via
@@ -428,14 +434,14 @@ class FileAdapter(SourceAdapter):
                 ranked: list[tuple[int, str]] = []
                 for t in tables:
                     try:
-                        n = con.execute(f'SELECT COUNT(*) FROM s."{t}"').fetchone()[0]
+                        n = con.execute(f"SELECT COUNT(*) FROM s.{identifier(t)}").fetchone()[0]
                     except Exception:
                         n = 0
                     ranked.append((n, t))
                 ranked.sort(key=lambda kv: (-kv[0], kv[1]))
                 table = ranked[0][1]
             # Quote the identifier for tables with reserved-word or punctuated names
-            return f'SELECT * FROM s."{table}"'
+            return f"SELECT * FROM s.{identifier(table)}"
         raise ValueError(f"Unsupported file type: {ext}")
 
     def _load_with_polars(self) -> "pl.DataFrame":

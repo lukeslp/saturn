@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -376,19 +378,43 @@ def render_compare_html(report, output_path: Path) -> Path:
 
 
 def write_findings(data: ReportData, output_path: Path) -> Path:
-    output_path.write_text(
-        json.dumps(
-            data.to_findings(), indent=2, default=_json_default, allow_nan=False
-        ),
-        encoding="utf-8",
+    _atomic_write_text(
+        output_path,
+        json.dumps(data.to_findings(), indent=2, default=_json_default, allow_nan=False),
     )
     return output_path
 
 
 def write_compare_findings(report, output_path: Path) -> Path:
     payload = {"saturn_version": __version__, **report.to_dict()}
-    output_path.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
+    _atomic_write_text(
+        output_path,
+        json.dumps(payload, indent=2, default=_json_default, allow_nan=False),
+    )
     return output_path
+
+
+def _atomic_write_text(output_path: Path, content: str) -> None:
+    """Durably replace a text artifact without exposing a partial file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{output_path.name}.", dir=output_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, output_path)
+        dir_fd = os.open(output_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _jinja() -> Environment:

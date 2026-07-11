@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 from saturn.profilers import profile_columns, profile_dataframe
-from saturn.report import assemble, render_html, write_findings
+from saturn.report import assemble, render_html, write_compare_findings, write_findings
 
 
 def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
@@ -64,6 +64,45 @@ def test_write_findings_rejects_non_finite_values(tmp_path: Path):
 
     with pytest.raises(ValueError, match="JSON compliant"):
         write_findings(report, tmp_path / "findings.json")
+
+
+def test_write_findings_replaces_existing_file_atomically(tmp_path: Path, monkeypatch):
+    report = assemble(
+        source="test://atomic", row_count=1, sampled_rows=1, seed=42,
+        schema={"x": "numeric"},
+        results=profile_columns({"x": "numeric"}, [{"x": 1.0}]),
+    )
+    output = tmp_path / "findings.json"
+    output.write_text("old")
+    replacements = []
+    import saturn.report as report_module
+    real_replace = report_module.os.replace
+
+    def recording_replace(source, destination):
+        replacements.append((Path(source), Path(destination)))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(report_module.os, "replace", recording_replace)
+    write_findings(report, output)
+
+    assert replacements and replacements[0][1] == output
+    assert replacements[0][0].parent == output.parent
+    assert json.loads(output.read_text())["meta"]["source"] == "test://atomic"
+    assert not replacements[0][0].exists()
+
+
+def test_compare_findings_reject_non_finite_without_damaging_existing_file(tmp_path: Path):
+    class BadReport:
+        def to_dict(self):
+            return {"score": float("inf")}
+
+    output = tmp_path / "compare.json"
+    output.write_text("preserve me")
+
+    with pytest.raises(ValueError, match="JSON compliant"):
+        write_compare_findings(BadReport(), output)
+
+    assert output.read_text() == "preserve me"
 
 
 def test_correlation_uses_pairwise_complete_source_rows_and_records_counts():

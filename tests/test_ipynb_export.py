@@ -205,6 +205,36 @@ def test_nbformat_validates_export(profile_doc):
     nbf.validate(nb_node)  # raises on malformed structure
 
 
+def test_generated_profile_python_safely_quotes_ids_columns_and_titles(tmp_path):
+    payload = json.loads(json.dumps(PROFILE_FIXTURE))
+    hostile = "value'); injected = True; #\n\"quoted\""
+    payload["columns"][0]["column"] = hostile
+    payload["schema"] = {hostile: "numeric"}
+    p = tmp_path / "researcher's findings.json"
+    p.write_text(json.dumps(payload))
+
+    nb = to_ipynb(load_findings(p))
+    code_cells = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
+
+    for code in code_cells:
+        compile(code, "<generated notebook>", "exec")
+    assert not any("\ninjected = True" in code for code in code_cells)
+
+
+def test_generated_compare_python_safely_quotes_ids_and_column_names(tmp_path):
+    payload = json.loads(json.dumps(COMPARE_FIXTURE))
+    payload["columns"][0]["column"] = "x'); injected = True; #"
+    p = tmp_path / "team's comparison.json"
+    p.write_text(json.dumps(payload))
+
+    nb = to_ipynb(load_findings(p))
+    code_cells = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
+
+    for code in code_cells:
+        compile(code, "<generated notebook>", "exec")
+    assert not any("\ninjected = True" in code for code in code_cells)
+
+
 # ---------- route ------------------------------------------------------------
 
 

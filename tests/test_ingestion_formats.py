@@ -183,6 +183,33 @@ def test_sqlite_picks_largest_table_when_multiple(tmp_path):
     assert "label" in df.columns
 
 
+def test_file_path_with_apostrophe_is_a_valid_duckdb_literal(tmp_path):
+    path = tmp_path / "researcher's data.csv"
+    path.write_text("id,label\n1,alpha\n2,beta\n")
+
+    adapter = FileAdapter(path)
+    df = adapter._conn().execute(adapter._scan_sql()).fetch_arrow_table()
+
+    assert df.num_rows == 2
+    assert df.column("label").to_pylist() == ["alpha", "beta"]
+
+
+def test_sqlite_path_and_table_name_are_safely_quoted(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "researcher's data.sqlite"
+    conn = sqlite3.connect(str(db))
+    conn.execute('CREATE TABLE "results""2026" (id INTEGER, label TEXT)')
+    conn.execute('INSERT INTO "results""2026" VALUES (1, "complete")')
+    conn.commit()
+    conn.close()
+
+    df = FileAdapter(db, table='results"2026').load_dataframe()
+
+    assert df.height == 1
+    assert df["label"].to_list() == ["complete"]
+
+
 # ---------- multi-sheet XLSX picker -----------------------------------------
 
 

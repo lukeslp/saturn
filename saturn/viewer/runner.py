@@ -152,7 +152,7 @@ def backfill_insights(
     from ..llm.engine import run_compare_insights, run_insights
     from ..llm.gateway import parse_provider_spec
     from ..llm.keys import MissingKeyError, load_api_keys
-    from ..report import ReportData
+    from ..report import ReportData, _atomic_write_text
 
     payload = json.loads(path.read_text())
 
@@ -214,7 +214,7 @@ def backfill_insights(
         out = data.to_findings()
 
     _set(job_id, message="writing findings")
-    path.write_text(json.dumps(out, default=str, indent=2))
+    _atomic_write_text(path, json.dumps(out, default=str, indent=2, allow_nan=False))
     _set(job_id, finding_id=finding_id, message=f"{len(bundle.insights)} insight(s) generated")
 
 
