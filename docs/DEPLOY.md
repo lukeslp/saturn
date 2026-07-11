@@ -1,11 +1,12 @@
 # Deploying the saturn viewer on dr.eamer.dev
 
-The viewer ships as an optional extra (`pip install 'saturn-dissect[web]'`). Local use needs nothing beyond `saturn serve`. Server deployment is wired through `sm` and Caddy.
+The public viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). Server deployment is wired through `sm` and Caddy. A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
 
 ## Local dev
 
 ```bash
-pip install -e '.[web]'
+pip install -e '.[web,llm]'
+export ANTHROPIC_API_KEY='...'
 saturn serve --dir ./findings --port 5043
 open http://127.0.0.1:5043
 ```
@@ -39,7 +40,17 @@ sm stop saturn-viewer
 
 ### 2. `scripts/start.sh` (already committed)
 
-Activates the saturn venv and runs gunicorn against the Flask app factory:
+Install the deployed environment with the viewer and provider gateway:
+
+```bash
+pip install -e '.[web,llm]'
+```
+
+Configure the service manager to inject `ANTHROPIC_API_KEY` into the process environment for the default `anthropic:claude-opus-4-7` workflow. Store the secret in the deployment platform's secret/environment facility, outside this repository; do not put it in `scripts/start.sh`, a tracked dotenv file, or service-manager source. A different `SATURN_DEFAULT_LLM` requires that provider's standard environment key.
+
+If the key is missing or the provider call fails, Saturn records the model-stage error and continues with deterministic findings. This fail-open behavior keeps analysis available but means the public model narrative is absent until the service environment is corrected.
+
+`scripts/start.sh` activates the saturn venv and runs gunicorn against the Flask app factory:
 
 ```bash
 exec gunicorn \
@@ -49,7 +60,7 @@ exec gunicorn \
     "saturn.viewer.app:create_app(findings_dir='${FINDINGS_DIR}')"
 ```
 
-Environment knobs: `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`. Defaults: `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
+Environment knobs: `ANTHROPIC_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`. Defaults: `anthropic:claude-opus-4-7`, `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`. `ANTHROPIC_API_KEY` has no default and must be explicitly injected for the default public model workflow. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
 
 ### 3. Findings directory
 

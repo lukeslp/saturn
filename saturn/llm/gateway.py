@@ -72,6 +72,30 @@ def _is_rate_limit(exc: Exception) -> bool:
     return "429" in text or "rate limit" in text or "rate_limit" in text
 
 
+def _normalized_usage(usage_obj: Any) -> dict[str, int]:
+    """Translate LiteLLM usage fields into Saturn's stable token schema."""
+    if not usage_obj:
+        return {}
+    if hasattr(usage_obj, "model_dump"):
+        raw = usage_obj.model_dump(exclude_none=True)
+    elif isinstance(usage_obj, dict):
+        raw = usage_obj
+    else:
+        raw = vars(usage_obj)
+
+    aliases = {
+        "input_tokens": ("input_tokens", "prompt_tokens"),
+        "output_tokens": ("output_tokens", "completion_tokens"),
+        "total_tokens": ("total_tokens",),
+    }
+    normalized: dict[str, int] = {}
+    for target, candidates in aliases.items():
+        value = next((raw[name] for name in candidates if raw.get(name) is not None), None)
+        if value is not None:
+            normalized[target] = int(value)
+    return normalized
+
+
 def call_provider(
     spec: ProviderSpec,
     *,
@@ -94,11 +118,7 @@ def call_provider(
                     model=_model_name(spec), messages=messages, api_key=api_key,
                     **provider_kwargs,
                 )
-                usage_obj = getattr(response, "usage", None)
-                if hasattr(usage_obj, "model_dump"):
-                    usage = usage_obj.model_dump(exclude_none=True)
-                else:
-                    usage = dict(usage_obj) if usage_obj else {}
+                usage = _normalized_usage(getattr(response, "usage", None))
                 content = getattr(response, "content", None)
                 if content is None:
                     content = response.choices[0].message.content

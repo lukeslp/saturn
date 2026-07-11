@@ -73,12 +73,15 @@ saturn compare data.csv --by slice --llm anthropic
 ## Viewer
 
 ```bash
-pip install -e '.[web]'
+pip install -e '.[web,llm]'
+export ANTHROPIC_API_KEY='...'  # required for the default public model workflow
 saturn serve --dir path/to/findings/ --port 5043
 open http://127.0.0.1:5043
 ```
 
 A WCAG 2.2 AA compliant live alternative to the static HTML report. Drop findings JSON files into a directory; refreshing the index picks up new runs without restarting. `/api/findings/<id>` returns the raw JSON for scripting.
+
+Inject provider credentials through the service environment; never store them in the repository. Without `ANTHROPIC_API_KEY`, the default model stage fails open and Saturn still returns the deterministic analysis without a model narrative.
 
 ## Design
 

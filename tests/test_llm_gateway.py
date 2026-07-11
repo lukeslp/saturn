@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +35,11 @@ def test_provider_spec_label():
 def test_call_provider_wires_messages_and_returns_content_usage():
     fake_response = MagicMock()
     fake_response.content = '{"narrative": "x", "confidence": "high", "evidence_keys": []}'
-    fake_response.usage = {"input_tokens": 10, "output_tokens": 5}
+    fake_response.usage = {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+    }
     fake_response.model = "claude-sonnet-4-6"
 
     with patch("saturn.llm.gateway._completion", return_value=fake_response) as complete:
@@ -46,7 +51,7 @@ def test_call_provider_wires_messages_and_returns_content_usage():
         )
 
     assert content.startswith("{")
-    assert usage == {"input_tokens": 10, "output_tokens": 5}
+    assert usage == {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
     kwargs = complete.call_args.kwargs
     assert kwargs["model"] == "anthropic/claude-sonnet-4-6"
     assert kwargs["api_key"] == "sk-test"
@@ -54,6 +59,26 @@ def test_call_provider_wires_messages_and_returns_content_usage():
         {"role": "system", "content": "sys"},
         {"role": "user", "content": "user"},
     ]
+
+
+def test_call_provider_normalizes_object_shaped_litellm_usage():
+    fake_response = MagicMock()
+    fake_response.content = '{"narrative": "x"}'
+    fake_response.usage = SimpleNamespace(
+        prompt_tokens=12,
+        completion_tokens=7,
+        total_tokens=19,
+    )
+
+    with patch("saturn.llm.gateway._completion", return_value=fake_response):
+        _content, usage = call_provider(
+            ProviderSpec(provider="anthropic", model="claude-sonnet-4-6"),
+            system="sys",
+            user="user",
+            api_key="sk-test",
+        )
+
+    assert usage == {"input_tokens": 12, "output_tokens": 7, "total_tokens": 19}
 
 
 def test_call_provider_handles_missing_usage_gracefully():

@@ -2,7 +2,7 @@
 # Saturn viewer launcher for dr.eamer.dev (sm-managed, port 5043).
 #
 # Reads findings JSON files out of /home/coolhand/saturn-findings/.
-# Backing venv: /home/coolhand/projects/saturn/saturn/venv (installed with [web] extra).
+# Backing venv: /home/coolhand/projects/saturn/saturn/venv (installed with [web,llm]).
 
 set -euo pipefail
 
@@ -21,10 +21,11 @@ source venv/bin/activate
 # Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
 export SATURN_TRUST_FORWARDED_PREFIX=1
 
-# Demo posture: every public request runs the LLM pass against Opus on the
-# server's account. shared/config/ConfigManager picks up ANTHROPIC_API_KEY
-# from ~/documentation/API_KEYS.md, so we don't hardcode it here. Override
-# SATURN_DEFAULT_LLM if a future demo wants a different provider/model.
+# Demo posture: public requests attempt the LLM pass against Opus. The service
+# manager must inject ANTHROPIC_API_KEY into this process environment; secrets
+# never belong in this script or the repository. If the key is absent, Saturn
+# fails open and still returns the deterministic analysis without model insight.
+# Override SATURN_DEFAULT_LLM only together with that provider's standard key.
 export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-anthropic:claude-opus-4-7}"
 # Demo posture: anonymous uploads silently use the server's keys. Without
 # this flag, public submissions are forced into BYOK mode (or fail). For a
