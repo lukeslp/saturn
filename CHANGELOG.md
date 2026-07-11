@@ -4,7 +4,12 @@ All notable changes to saturn are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-10
+
 ### Added
+- **Self-contained LLM installation.** `[llm]` now uses a package-owned LiteLLM boundary and no longer requires a private `PYTHONPATH` dependency.
+- **Packaging CI.** Python 3.10 and 3.11 run the offline suite, package build/install smoke, and CLI smoke on every change.
+- `[web]` now includes Gunicorn plus the Markdown and Bleach annotation-rendering dependencies.
 - **GeoJSON ingestion.** `.geojson` FeatureCollections flatten to one row per feature (the union of `properties` keys plus a synthetic `geometry_type`); coordinate geometry is dropped as non-tabular. Previously `.geojson` raised "Unsupported file type".
 - **Robust JSON arrays with heterogeneous keys.** `.json` files whose objects carry different key sets (a late record with an extra field) now load via full-scan inference with a Python-union fallback, and `schema()` falls back to the eager loader when DuckDB can't cheaply sample. Fixes "set union_by_name to true" / "extra field in struct" failures on real 50k–350k-row arrays.
 - **Wide-table guard on the per-column LLM pass.** `analyze` now skips per-column insight calls for near-empty columns (`null_rate >= --llm-skip-null-rate`, default 0.95) and caps the rest at `--llm-max-columns` (default 40), prioritising informative columns. A pathologically wide file (a real CSV had 257 columns, ~237 of them empty `Unnamed: N` from an Excel export) no longer fires one provider call per column and times out. Deterministic stats still cover every column; `--llm-max-columns -1` restores the uncapped behaviour.

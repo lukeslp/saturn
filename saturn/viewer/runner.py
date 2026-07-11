@@ -300,7 +300,7 @@ def backfill_insights(
 
     _set(job_id, message="loading findings")
 
-    # Lazy imports so the viewer can boot without ~/shared on PYTHONPATH
+    # Lazy imports so the viewer can boot without the optional [llm] extra.
     from ..llm.engine import run_compare_insights, run_insights
     from ..llm.gateway import parse_provider_spec
     from ..llm.keys import MissingKeyError, load_api_keys
@@ -391,7 +391,6 @@ def _build_subprocess_env(provider_spec: str | None, api_key: str | None) -> dic
       so visitors cannot accidentally drain the server's quota.
     """
     env = os.environ.copy()
-    env["PYTHONPATH"] = f"/home/coolhand/shared:{env.get('PYTHONPATH', '')}"
     demo_mode = os.environ.get("SATURN_PUBLIC_KEYS") == "1"
 
     if api_key and provider_spec:

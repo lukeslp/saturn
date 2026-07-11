@@ -1,4 +1,4 @@
-"""Tests for saturn.llm.gateway — wrapper around ~/shared/llm_providers.ProviderFactory."""
+"""Tests for saturn's package-owned provider gateway."""
 
 from __future__ import annotations
 
@@ -37,11 +37,7 @@ def test_call_provider_wires_messages_and_returns_content_usage():
     fake_response.usage = {"input_tokens": 10, "output_tokens": 5}
     fake_response.model = "claude-sonnet-4-6"
 
-    fake_provider = MagicMock()
-    fake_provider.complete.return_value = fake_response
-
-    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory:
-        mock_factory.create_provider.return_value = fake_provider
+    with patch("saturn.llm.gateway._completion", return_value=fake_response) as complete:
         content, usage = call_provider(
             ProviderSpec(provider="anthropic", model="claude-sonnet-4-6"),
             system="sys",
@@ -51,25 +47,20 @@ def test_call_provider_wires_messages_and_returns_content_usage():
 
     assert content.startswith("{")
     assert usage == {"input_tokens": 10, "output_tokens": 5}
-    mock_factory.create_provider.assert_called_once_with(
-        "anthropic", api_key="sk-test", model="claude-sonnet-4-6"
-    )
-    # Must send a system message + user message, in that order
-    messages = fake_provider.complete.call_args[0][0]
-    assert [m.role for m in messages] == ["system", "user"]
-    assert messages[0].content == "sys"
-    assert messages[1].content == "user"
+    kwargs = complete.call_args.kwargs
+    assert kwargs["model"] == "anthropic/claude-sonnet-4-6"
+    assert kwargs["api_key"] == "sk-test"
+    assert kwargs["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "user"},
+    ]
 
 
 def test_call_provider_handles_missing_usage_gracefully():
     fake_response = MagicMock()
     fake_response.content = '{"x": 1}'
     fake_response.usage = None
-    fake_provider = MagicMock()
-    fake_provider.complete.return_value = fake_response
-
-    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory:
-        mock_factory.create_provider.return_value = fake_provider
+    with patch("saturn.llm.gateway._completion", return_value=fake_response):
         _content, usage = call_provider(
             ProviderSpec("anthropic", None),
             system="s",
@@ -98,17 +89,14 @@ def test_call_provider_retries_on_rate_limit():
             raise FakeRateLimitError("429 rate_limit_error: concurrent limit")
         return fake_response
 
-    fake_provider = MagicMock()
-    fake_provider.complete.side_effect = _complete
-
-    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory, \
+    with patch("saturn.llm.gateway._completion", side_effect=_complete) as complete, \
          patch("saturn.llm.gateway.time.sleep"):  # skip backoff waits
-        mock_factory.create_provider.return_value = fake_provider
         content, _ = call_provider(
             ProviderSpec("anthropic", None),
             system="s", user="u", api_key="sk",
         )
     assert calls["n"] == 3
+    assert complete.call_count == 3
     assert content == "{}"
 
 
@@ -116,12 +104,8 @@ def test_call_provider_does_not_retry_non_rate_limit_errors():
     """Non-429 errors should fail fast, not burn retries."""
     from unittest.mock import MagicMock, patch
 
-    fake_provider = MagicMock()
-    fake_provider.complete.side_effect = ValueError("bad request")
-
-    with patch("saturn.llm.gateway.ProviderFactory") as mock_factory, \
+    with patch("saturn.llm.gateway._completion", side_effect=ValueError("bad request")) as complete, \
          patch("saturn.llm.gateway.time.sleep") as mock_sleep:
-        mock_factory.create_provider.return_value = fake_provider
         try:
             call_provider(
                 ProviderSpec("anthropic", None),
@@ -130,5 +114,19 @@ def test_call_provider_does_not_retry_non_rate_limit_errors():
             assert False, "should have raised"
         except ValueError:
             pass
-    assert fake_provider.complete.call_count == 1
+    assert complete.call_count == 1
     mock_sleep.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        (ProviderSpec("openai", None), "openai/gpt-4o-mini"),
+        (ProviderSpec("ollama", "llama3.2"), "ollama/llama3.2"),
+        (ProviderSpec("huggingface", "org/model"), "huggingface/org/model"),
+    ],
+)
+def test_provider_model_mapping(spec, expected):
+    from saturn.llm.gateway import _model_name
+
+    assert _model_name(spec) == expected

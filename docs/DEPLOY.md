@@ -24,7 +24,7 @@ open http://127.0.0.1:5043
     'port': 5043,
     'health_endpoint': 'http://localhost:5043/health',
     'start_timeout': 15,
-    'description': 'Live saturn findings viewer (read-only, WCAG 2.2 AA, reads /home/coolhand/saturn-findings)'
+    'description': 'Live saturn findings workbench (WCAG 2.2 AA, reads and creates findings in /home/coolhand/saturn-findings)'
 }
 ```
 
@@ -39,7 +39,7 @@ sm stop saturn-viewer
 
 ### 2. `scripts/start.sh` (already committed)
 
-Activates the saturn venv, puts `~/shared` on `PYTHONPATH`, runs gunicorn against the Flask app factory:
+Activates the saturn venv and runs gunicorn against the Flask app factory:
 
 ```bash
 exec gunicorn \
@@ -49,7 +49,7 @@ exec gunicorn \
     "saturn.viewer.app:create_app(findings_dir='${FINDINGS_DIR}')"
 ```
 
-Environment knobs: `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`. Defaults: `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `2`, `4`.
+Environment knobs: `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`. Defaults: `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
 
 ### 3. Findings directory
 
@@ -93,7 +93,7 @@ Expected: `{"findings_dir":"/home/coolhand/saturn-findings","status":"ok"}`.
 
 ## Security posture
 
-- **Read-only.** No POST/PUT/DELETE routes. No auth intentionally; findings are treated like other public `~/html/` content.
+- **Mutation surface.** `POST /analyze` uploads a local dataset, `POST /analyze-hf` queues a Hugging Face dataset, and `POST /backfill/<id>` adds an LLM reading to an existing finding. Bound request sizes, extension checks, the bounded job queue, and deployment access controls are therefore security boundaries. GET routes continue to serve findings and job status.
 - **Path-traversal guard.** `_safe_findings_path` in `saturn/viewer/app.py` resolves every `<id>` against the configured findings dir and 404s anything that escapes. Belt and suspenders; Flask's default string converter already forbids `/`.
 - **No PII by design.** saturn's findings are aggregates (counts, rates, alerts, top values, language mix). Still: treat the findings dir like any public directory. Don't drop findings from a dataset you can't share. `top_values` on a free-text column can surface snippets of actual content.
 - **Rate limiting.** Not configured in-app. If traffic ever matters, add Caddy's `rate_limit` plugin at the path.

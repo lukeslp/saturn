@@ -26,6 +26,8 @@ from typing import Any
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 from werkzeug.utils import secure_filename
 
+from saturn import __version__
+
 from .loader import FindingsKind, list_findings, load_findings
 from .runner import (
     JobCapacityError,
@@ -146,6 +148,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         template_folder=str(Path(__file__).parent / "templates"),
         static_folder=str(Path(__file__).parent / "static"),
     )
+    app.jinja_env.globals["saturn_version"] = __version__
     app.config["SATURN_FINDINGS_DIR"] = Path(findings_dir)
     app.config["SATURN_UPLOAD_DIR"] = Path(
         os.environ.get("SATURN_UPLOAD_DIR", str(Path(tempfile.gettempdir()) / "saturn-uploads"))

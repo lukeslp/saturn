@@ -30,7 +30,7 @@ saturn compare lukeslp/bluesky-alt-text --by source_mode \
 # Compare two independent sources
 saturn compare hf://user/a hf://user/b
 
-# LLM insight pass (opt-in; PYTHONPATH must include ~/shared)
+# LLM insight pass (opt-in; install the [llm] extra)
 saturn analyze data.csv --llm anthropic
 saturn analyze data.csv --llm anthropic:claude-sonnet-4-6 --llm openai:gpt-4o-mini
 
@@ -104,7 +104,7 @@ Four commands: `analyze`, `huggingface`, `compare`, `serve`, plus `version`. `_r
 Engaged only when `--llm provider[:model]` is passed. Five small modules:
 - `evidence.py`: projects `ReportData` into a compact model-ready dict. The pass never sees raw user rows.
 - `prompts.py`: deterministic system/user prompt builders, version-tagged `saturn-insight-v1`.
-- `gateway.py`: single choke point over `~/shared/llm_providers.ProviderFactory`. No direct vendor SDK imports allowed anywhere else.
+- `gateway.py`: package-owned choke point over LiteLLM's public provider interface. No provider imports are allowed elsewhere.
 - `parsing.py`: tolerant JSON extraction plus schema validation.
 - `engine.py`: orchestrates primary insight + optional catfish critique with fail-open error handling.
 
@@ -136,7 +136,7 @@ Reads JSON findings off disk and serves them via Flask on port 5043. Routes: `/`
 - **Phase 2** (shipped): `--llm provider[:model]` insight pass with catfish critic, analyze and huggingface commands
 - **Phase 2.5** (shipped): compare-mode insight pass with pair evidence and delta-aware prompts
 - **Phase 4** (shipped): compare mode, divergence summary, streaming fallback
-- **Phase 5** (shipped): Flask viewer on port 5043 (`saturn serve`), read-only, WCAG 2.2 AA
+- **Phase 5** (shipped): Flask workbench on port 5043 (`saturn serve`), with bounded analysis mutation routes and WCAG 2.2 AA
 - **Phase 3** (planned): BERTopic clustering via the `[nlp]` extra
 
 The `ReportData.to_findings()` contract is the interchange format everything downstream keys off. The viewer serves it verbatim via `/api/findings/<id>`, so Phase 2 insights appear in the viewer automatically once the key is populated.
@@ -147,4 +147,4 @@ The `ReportData.to_findings()` contract is the interchange format everything dow
 - **Python 3.10 required.** No 3.11/3.12 support on this server.
 - **HF bulk load sometimes fails** with `DatasetGenerationError` on datasets whose shards disagree on schema. The streaming fallback in `HFAdapter._load_dataframe_via_stream` recovers most of these but caps at 500K rows.
 - **Saturn outputs are gitignored** at the repo level (`saturn_report.html`, `saturn_findings.json`, `*.saturn.{html,json}`). Generated reports never get committed accidentally.
-- **`--llm` needs `~/shared` on `PYTHONPATH`.** Without it the flag prints an error and the deterministic pass still runs. The CI suite sets `PYTHONPATH` so tests can import the gateway.
+- **`--llm` needs the `[llm]` extra.** Provider keys come from standard environment variables; no private source tree is required.

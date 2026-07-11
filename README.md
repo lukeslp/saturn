@@ -109,7 +109,7 @@ Pass `--llm provider[:model]` on `analyze`, `huggingface`, or `compare` to layer
 
 On compare mode the insight pass walks the top-K most divergent columns (ranked by the same composite score powering the "most divergent" section) and emits a pair-aware narrative referring to each side by its label.
 
-Requires `~/shared/llm_providers` on `PYTHONPATH` (the unified provider gateway). Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
+Install `pip install 'saturn-dissect[llm]'` and set the provider's standard API-key environment variable. Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
 
 ## Data handling
 
@@ -129,7 +129,7 @@ export SATURN_REDACT_EVIDENCE_VALUES=1
 
 With redaction on, counts, stats, and the language mix still go to the model; only the verbatim values and words are held back.
 
-The destination is whichever provider you name in `--llm`. Through `~/shared/llm_providers` that can be any of: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
+The destination is whichever provider you name in `--llm`: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
 
 Language detection is local in every mode. When the fastText `lid.176` model is present, saturn uses it and stamps a CC-BY-SA-3.0 attribution into the report footer and the JSON sidecar (`attributions` key), because language counts produced by `lid.176` are a derivative work. See [NOTICE](NOTICE).
 

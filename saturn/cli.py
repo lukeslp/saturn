@@ -44,7 +44,7 @@ try:
     from .llm.gateway import parse_provider_spec
     from .llm.keys import MissingKeyError, load_api_keys
     _LLM_AVAILABLE = True
-except ImportError:  # ~/shared/llm_providers not on PYTHONPATH
+except ImportError:  # [llm] extra not installed
     run_insights = None
     run_compare_insights = None
     parse_provider_spec = None
@@ -62,7 +62,7 @@ def _resolve_llm(llm_spec: list[str] | None):
         return None
     if not _LLM_AVAILABLE:
         console.print(
-            "[red]--llm requires ~/shared on PYTHONPATH[/] (see docs/DEPLOY.md)"
+            "[red]--llm requires the llm extra: pip install 'saturn-dissect[llm]'[/]"
         )
         return None
     try:
