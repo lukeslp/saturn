@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from saturn.profilers import profile_columns, profile_dataframe
 from saturn.report import assemble, render_html, write_findings
@@ -51,6 +52,18 @@ def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
     assert cols["image_alt_length"]["kind"] == "numeric"
     assert cols["alt_text"]["kind"] == "text"
     assert cols["author_handle"]["kind"] == "categorical"
+
+
+def test_write_findings_rejects_non_finite_values(tmp_path: Path):
+    report = assemble(
+        source="test://strict-json", row_count=1, sampled_rows=1, seed=42,
+        schema={"x": "numeric"},
+        results=profile_columns({"x": "numeric"}, [{"x": 1.0}]),
+    )
+    report.results[0].stats["bad"] = float("nan")
+
+    with pytest.raises(ValueError, match="JSON compliant"):
+        write_findings(report, tmp_path / "findings.json")
 
 
 def test_correlation_uses_pairwise_complete_source_rows_and_records_counts():

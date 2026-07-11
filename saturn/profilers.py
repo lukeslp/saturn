@@ -86,11 +86,14 @@ def _numeric_stats(a) -> tuple[dict, dict]:
     if a.size == 0:
         return {}, {}
 
-    q1, q3 = np.quantile(a, [0.25, 0.75])
-    iqr = q3 - q1
-    outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
+    with np.errstate(over="ignore", invalid="ignore"):
+        q1, q3 = np.quantile(a, [0.25, 0.75])
+        iqr = q3 - q1
+        outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
 
-    if a.size > 2 and float(a.std(ddof=0)) > 1e-12:
+    with np.errstate(over="ignore", invalid="ignore"):
+        population_std = float(a.std(ddof=0))
+    if a.size > 2 and math.isfinite(population_std) and population_std > 1e-12:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             skew = float(scs.skew(a))
@@ -99,23 +102,38 @@ def _numeric_stats(a) -> tuple[dict, dict]:
         skew = 0.0
         kurt = 0.0
 
+    def finite(value: Any) -> float | None:
+        value = float(value)
+        return value if math.isfinite(value) else None
+
+    with np.errstate(over="ignore", invalid="ignore"):
+        mean = finite(a.mean())
+        median = finite(np.median(a))
+        std = finite(a.std(ddof=1)) if a.size > 1 else 0.0
+
     stats = {
         "min": float(a.min()),
         "max": float(a.max()),
-        "mean": float(a.mean()),
-        "median": float(np.median(a)),
-        "std": float(a.std(ddof=1)) if a.size > 1 else 0.0,
-        "q1": float(q1),
-        "q3": float(q3),
-        "iqr": float(iqr),
-        "skew": skew,
-        "kurtosis": kurt,
+        "mean": mean,
+        "median": median,
+        "std": std,
+        "q1": finite(q1),
+        "q3": finite(q3),
+        "iqr": finite(iqr),
+        "skew": finite(skew),
+        "kurtosis": finite(kurt),
         "n_outliers": int(outlier_mask.sum()),
         "outlier_rate": float(outlier_mask.mean()),
         "zero_rate": float((a == 0).mean()),
     }
     bins = min(40, max(5, int(math.sqrt(a.size))))
-    hist_counts, hist_edges = np.histogram(a, bins=bins)
+    try:
+        hist_counts, hist_edges = np.histogram(a, bins=bins)
+    except (OverflowError, ValueError):
+        # NumPy cannot expand a constant value near float64's limit into
+        # finite-width bins. A single exact bin preserves the accounting.
+        hist_counts = np.asarray([a.size], dtype=int)
+        hist_edges = np.asarray([a.min(), a.max()], dtype=float)
     sample_idx = np.random.default_rng(42).choice(
         a.size, size=min(500, a.size), replace=False
     )
@@ -641,7 +659,7 @@ def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
             continue
         try:
             numeric = float(v)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             n_null += 1
             continue
         if not math.isfinite(numeric):

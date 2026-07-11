@@ -52,3 +52,17 @@ def test_numeric_non_finite_values_are_counted_as_null_and_not_serialized():
     assert result.stats["min"] == 1.0
     assert result.stats["max"] == 3.0
     json.dumps(result.to_dict(), allow_nan=False)
+
+
+def test_numeric_extreme_finite_and_overflowing_integer_are_json_safe():
+    huge_integer = 10**10000
+    rows = [{"x": value} for value in [1e308, 1e308, huge_integer]]
+
+    result = profile_columns({"x": "numeric"}, rows)[0]
+
+    assert result.n == 3
+    assert result.n_null == 1
+    assert result.n_unique == 1
+    assert result.stats["min"] == 1e308
+    assert result.stats["max"] == 1e308
+    json.dumps(result.to_dict(), allow_nan=False)

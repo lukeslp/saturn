@@ -127,9 +127,8 @@ class ReportData:
 
         Enables the backfill flow: load findings from disk, run the LLM pass
         against the same aggregates the viewer already has, write insights back.
-        Charts and correlation matrix are not restored — they're expensive
-        render artifacts, not contract data. The insight pass only needs
-        `results` + `meta`.
+        Rendered charts are not restored, but correlation values are contract
+        data and survive load/write cycles.
         """
         from .profilers import Alert, ProfileResult
 
@@ -167,6 +166,11 @@ class ReportData:
             language_counts=payload.get("language_counts", {}) or {},
             notes=payload.get("notes", []) or [],
         )
+        correlations = payload.get("correlations")
+        if isinstance(correlations, dict):
+            data.correlation_labels = correlations.get("labels")
+            data.correlation_matrix = correlations.get("matrix")
+            data.correlation_pair_counts = correlations.get("pair_counts")
         if "insights" in payload:
             from .insights import Critique, Insight, InsightBundle
 
@@ -373,7 +377,10 @@ def render_compare_html(report, output_path: Path) -> Path:
 
 def write_findings(data: ReportData, output_path: Path) -> Path:
     output_path.write_text(
-        json.dumps(data.to_findings(), indent=2, default=_json_default), encoding="utf-8"
+        json.dumps(
+            data.to_findings(), indent=2, default=_json_default, allow_nan=False
+        ),
+        encoding="utf-8",
     )
     return output_path
 

@@ -76,3 +76,14 @@ def test_profile_dataframe_treats_nan_and_infinity_as_null():
     assert result.n_unique == 2
     assert result.stats["mean"] == 2.0
     json.dumps(result.to_dict(), allow_nan=False)
+
+
+def test_profile_dataframe_extreme_finite_values_are_json_safe():
+    result = profile_dataframe(pl.DataFrame({"x": [1e308, 1e308]}), {"x": "numeric"})[0]
+
+    assert result.n == 2
+    assert result.n_null == 0
+    assert result.n_unique == 1
+    assert result.stats["min"] == 1e308
+    assert result.stats["max"] == 1e308
+    json.dumps(result.to_dict(), allow_nan=False)
