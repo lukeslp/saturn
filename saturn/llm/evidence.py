@@ -41,6 +41,7 @@ _VALUE_BYTE_CAP = 200
 # byte-capped like top_values otherwise. Categorical/boolean columns set this to
 # the single most-frequent verbatim value.
 _LITERAL_STAT_KEYS = ("top_value",)
+_LITERAL_DELTA_KEYS = ("top_value_a", "top_value_b")
 
 
 def _prune_language_counts(counts: dict[str, int]) -> dict[str, int]:
@@ -56,6 +57,21 @@ def _cap_str(value: Any, cap: int = _VALUE_BYTE_CAP) -> str:
     return encoded[:cap].decode("utf-8", errors="ignore") + "…"
 
 
+def project_literals(
+    values: dict[str, Any], *, literal_keys: tuple[str, ...], redact_values: bool
+) -> dict[str, Any]:
+    """Copy a mapping while consistently redacting or capping literal fields."""
+    out = dict(values)
+    for key in literal_keys:
+        if key not in out:
+            continue
+        if redact_values:
+            out.pop(key, None)
+        elif isinstance(out[key], str):
+            out[key] = _cap_str(out[key])
+    return out
+
+
 def project_stats(stats: dict[str, Any], *, redact_values: bool) -> dict[str, Any]:
     """Copy `stats`, scrubbing or byte-capping its literal-value entries.
 
@@ -64,15 +80,16 @@ def project_stats(stats: dict[str, Any], *, redact_values: bool) -> dict[str, An
     entries; otherwise they are byte-capped like the rest of the evidence values.
     Shared by the single-dataset and compare projections.
     """
-    out = dict(stats)
-    for key in _LITERAL_STAT_KEYS:
-        if key not in out:
-            continue
-        if redact_values:
-            out.pop(key, None)
-        elif isinstance(out[key], str):
-            out[key] = _cap_str(out[key])
-    return out
+    return project_literals(
+        stats, literal_keys=_LITERAL_STAT_KEYS, redact_values=redact_values
+    )
+
+
+def project_delta(delta: dict[str, Any], *, redact_values: bool) -> dict[str, Any]:
+    """Project comparison deltas without leaking literal side values."""
+    return project_literals(
+        delta, literal_keys=_LITERAL_DELTA_KEYS, redact_values=redact_values
+    )
 
 
 def _cap_pairs(pairs: Any, cap: int = _VALUE_BYTE_CAP) -> list:

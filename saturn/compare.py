@@ -27,6 +27,9 @@ class ColumnComparison:
     b: ProfileResult | None
     delta: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    kind_a: str | None = None
+    kind_b: str | None = None
+    compatible: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -36,6 +39,9 @@ class ColumnComparison:
             "b": self.b.to_dict() if self.b else None,
             "delta": self.delta,
             "notes": self.notes,
+            "kind_a": self.kind_a if self.kind_a is not None else (self.a.kind if self.a else None),
+            "kind_b": self.kind_b if self.kind_b is not None else (self.b.kind if self.b else None),
+            "compatible": self.compatible,
         }
 
 
@@ -131,9 +137,9 @@ class CompareReport:
                 weight, label = result
                 score += weight
                 terms.append(label)
-            if c.notes:  # schema mismatch is always a divergence
-                score += 0.5
-                terms.append("schema mismatch")
+            if not c.compatible:
+                score += 1.0
+                terms.insert(0, f"schema drift: {c.kind_a} → {c.kind_b}")
             if score > 0:
                 scored.append((score, c, terms))
 
@@ -316,9 +322,8 @@ def compare_dataframes(
     schema_b = schema_b or _schema_from_dataframe(df_b).columns
     union = _shared_schema(schema_a, schema_b)
 
-    # profile_dataframe uses the passed schema verbatim so both sides use the union
-    results_a = {r.column: r for r in profile_dataframe(df_a, union, sample_seed=seed)}
-    results_b = {r.column: r for r in profile_dataframe(df_b, union, sample_seed=seed)}
+    results_a = {r.column: r for r in profile_dataframe(df_a, schema_a, sample_seed=seed)}
+    results_b = {r.column: r for r in profile_dataframe(df_b, schema_b, sample_seed=seed)}
 
     columns: list[ColumnComparison] = []
     for col, kind in union.items():
@@ -326,14 +331,29 @@ def compare_dataframes(
         b_res = results_b.get(col)
         notes: list[str] = []
         delta: dict[str, Any] = {}
+        kind_a = schema_a.get(col)
+        kind_b = schema_b.get(col)
+        compatible = kind_a is None or kind_b is None or kind_a == kind_b
         if a_res is None:
             notes.append(f"absent in {label_a}")
         if b_res is None:
             notes.append(f"absent in {label_b}")
-        if a_res is not None and b_res is not None:
-            delta = _delta(a_res, b_res, kind)
+        if a_res is not None and b_res is not None and compatible:
+            delta = _delta(a_res, b_res, kind_a or kind_b or kind)
+        elif a_res is not None and b_res is not None:
+            notes.append("schema drift")
         columns.append(
-            ColumnComparison(column=col, kind=kind, a=a_res, b=b_res, delta=delta, notes=notes)
+            ColumnComparison(
+                column=col,
+                kind=kind,
+                a=a_res,
+                b=b_res,
+                delta=delta,
+                notes=notes,
+                kind_a=kind_a,
+                kind_b=kind_b,
+                compatible=compatible,
+            )
         )
 
     def _merged_langs(results: dict[str, ProfileResult]) -> dict[str, int]:
