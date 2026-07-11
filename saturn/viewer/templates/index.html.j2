@@ -170,6 +170,31 @@
   {% endif %}
 </section>
 
+{% if archive %}
+<section class="readings" aria-label="Historical readings">
+  <header>
+    <h2>Historical readings</h2>
+    <span class="count">{{ "%03d" | format(archive|length) }} archived</span>
+  </header>
+  <p class="hint">
+    These preserved reports predate the current findings format. Open an entry for
+    its original report and downloadable notebook.
+  </p>
+  <div class="archive-list">
+    {% for artifact in archive %}
+      <article class="reading">
+        <div><span class="stamp">archive</span></div>
+        <div>
+          <h3><a href="{{ url_for('view', id=artifact.id) }}">{{ artifact.id.replace('-', ' ').replace('_', ' ') }}</a></h3>
+          <p class="source">Preserved HTML report and notebook</p>
+        </div>
+        <a class="open" href="{{ url_for('view', id=artifact.id) }}">Open</a>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% endblock %}
 {% block foot_extra %}
 <script src="{{ url_for('static', filename='dropzone.js') }}" defer></script>

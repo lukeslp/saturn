@@ -64,7 +64,14 @@ Environment knobs: `ANTHROPIC_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_D
 
 ### 3. Findings directory
 
-`/home/coolhand/saturn-findings/` is the single source. Drop any `*.json` file saturn produces (profile or compare) into it and the index picks it up on the next request. The matching `*.html` file can live alongside the JSON but the viewer doesn't need it.
+`/home/coolhand/saturn-findings/` is the source for current readings. Drop any `*.json` file saturn produces (profile or compare) into it and the index picks it up on the next request. The matching `*.html` file can live alongside the JSON but the viewer doesn't need it.
+
+The deployment also sets `SATURN_LEGACY_ARCHIVE_DIR` to the preserved historical
+artifact directory. Only complete, top-level `<safe-id>.html` and `<safe-id>.ipynb`
+pairs are indexed. Historical HTML is returned with a sandbox content security
+policy; notebooks download as attachments. Files with other extensions, nested
+paths and traversal attempts are never served. Dot-prefixed historical IDs are
+allowed only when they match the same strict character allowlist and complete pair.
 
 Data flow:
 

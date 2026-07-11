@@ -8,6 +8,7 @@ set -euo pipefail
 
 APP_DIR="/home/coolhand/projects/saturn/saturn"
 FINDINGS_DIR="${SATURN_FINDINGS_DIR:-/home/coolhand/saturn-findings}"
+LEGACY_ARCHIVE_DIR="${SATURN_LEGACY_ARCHIVE_DIR:-/home/coolhand/www/dr.eamer.dev/saturn/view}"
 PORT="${SATURN_PORT:-5043}"
 HOST="${SATURN_HOST:-127.0.0.1}"
 # Single worker so background job state (runner._JOBS) is shared across
@@ -20,6 +21,7 @@ cd "$APP_DIR"
 source venv/bin/activate
 # Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
 export SATURN_TRUST_FORWARDED_PREFIX=1
+export SATURN_LEGACY_ARCHIVE_DIR="$LEGACY_ARCHIVE_DIR"
 
 # Demo posture: public requests attempt the LLM pass against Opus. The service
 # manager must inject ANTHROPIC_API_KEY into this process environment; secrets

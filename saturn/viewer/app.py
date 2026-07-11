@@ -142,7 +142,12 @@ def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str |
     return provider, api_key
 
 
-def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
+def create_app(
+    *,
+    findings_dir: Path,
+    legacy_archive_dir: Path | None = None,
+    testing: bool = False,
+) -> Flask:
     app = Flask(
         __name__,
         template_folder=str(Path(__file__).parent / "templates"),
@@ -150,6 +155,10 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
     )
     app.jinja_env.globals["saturn_version"] = __version__
     app.config["SATURN_FINDINGS_DIR"] = Path(findings_dir)
+    configured_archive = legacy_archive_dir or os.environ.get("SATURN_LEGACY_ARCHIVE_DIR")
+    app.config["SATURN_LEGACY_ARCHIVE_DIR"] = (
+        Path(configured_archive) if configured_archive else None
+    )
     app.config["SATURN_UPLOAD_DIR"] = Path(
         os.environ.get("SATURN_UPLOAD_DIR", str(Path(tempfile.gettempdir()) / "saturn-uploads"))
     )
@@ -181,10 +190,13 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
 
     @app.get("/")
     def index():
+        from .archive import list_archive
+
         docs = list_findings(app.config["SATURN_FINDINGS_DIR"])
         return render_template(
             "index.html.j2",
             docs=docs,
+            archive=list_archive(app.config["SATURN_LEGACY_ARCHIVE_DIR"]),
             default_llm=app.config["SATURN_DEFAULT_LLM"],
         )
 
@@ -192,7 +204,21 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
     def view(id: str):
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
-            abort(404)
+            from .archive import archive_path, list_archive
+
+            legacy_html = archive_path(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".html"
+            )
+            legacy_notebook = archive_path(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".ipynb"
+            )
+            if legacy_html is None or legacy_notebook is None:
+                abort(404)
+            artifact = next(
+                item for item in list_archive(app.config["SATURN_LEGACY_ARCHIVE_DIR"])
+                if item.id == id
+            )
+            return render_template("archive.html.j2", artifact=artifact)
         doc = load_findings(path)
         view_mode = request.args.get("view", "report").lower()
         if view_mode not in {"report", "notebook"}:
@@ -315,7 +341,20 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
 
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
-            abort(404)
+            from flask import send_file
+            from .archive import archive_path
+
+            legacy_path = archive_path(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".ipynb"
+            )
+            if legacy_path is None:
+                abort(404)
+            return send_file(
+                legacy_path,
+                mimetype="application/x-ipynb+json",
+                as_attachment=True,
+                download_name=f"{id}.ipynb",
+            )
         doc = load_findings(path)
         notebook = to_ipynb(doc)
         body = _json.dumps(notebook, indent=1)
@@ -335,7 +374,23 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
 
         json_path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if json_path is None or not json_path.is_file():
-            abort(404)
+            from .archive import archive_path
+
+            legacy_path = archive_path(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".html"
+            )
+            if legacy_path is None:
+                abort(404)
+            response = send_file(
+                legacy_path,
+                mimetype="text/html",
+                as_attachment=False,
+                download_name=f"{id}.html",
+            )
+            # Historical reports are preserved verbatim. Sandbox them so any
+            # legacy active content cannot inherit the viewer's origin powers.
+            response.headers["Content-Security-Policy"] = "sandbox allow-scripts"
+            return response
         html_path = json_path.with_suffix(".html")
         if not html_path.is_file():
             abort(404)

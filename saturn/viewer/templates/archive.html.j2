@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ artifact.id }} · archived Saturn reading{% endblock %}
+{% block main %}
+<nav aria-label="Breadcrumb"><a href="{{ url_for('index') }}">← all readings</a></nav>
+<section class="hero">
+  <p class="eyebrow">historical artifact</p>
+  <h1>Archived reading</h1>
+  <p class="lede"><strong>{{ artifact.id.replace('-', ' ').replace('_', ' ') }}</strong></p>
+  <p>
+    This reading predates Saturn's current findings format. Its original report and
+    notebook are preserved as historical artifacts; current interactive analysis and
+    machine-readable findings are unavailable unless the source dataset is analyzed again.
+  </p>
+  <p>
+    <a class="btn" href="{{ url_for('view_static_html', id=artifact.id) }}">Open preserved report</a>
+    <a class="btn btn-ghost" href="{{ url_for('view_ipynb', id=artifact.id) }}">Download notebook</a>
+  </p>
+</section>
+{% endblock %}
