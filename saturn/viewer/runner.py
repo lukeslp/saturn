@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -55,6 +57,75 @@ class Job:
 
 _JOBS: dict[str, Job] = {}
 _LOCK = threading.Lock()
+_MAX_ACTIVE_JOBS = int(os.environ.get("SATURN_MAX_ACTIVE_JOBS", "2"))
+_MAX_QUEUED_JOBS = int(os.environ.get("SATURN_MAX_QUEUED_JOBS", "6"))
+_MAX_RETAINED_JOBS = int(os.environ.get("SATURN_MAX_RETAINED_JOBS", "200"))
+_JOB_TTL = int(os.environ.get("SATURN_JOB_TTL_SECONDS", "86400"))
+_EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_ACTIVE_JOBS, thread_name_prefix="saturn-job")
+_CAPACITY = threading.BoundedSemaphore(_MAX_ACTIVE_JOBS + _MAX_QUEUED_JOBS)
+_MANAGED_RESULTS: dict[Path, float] = {}
+
+
+class JobCapacityError(RuntimeError):
+    """Raised when the bounded viewer worker pool and queue are full."""
+
+
+def reset_job_runtime() -> None:
+    """Reset process-local state. Intended for tests and orderly shutdown."""
+    global _EXECUTOR, _CAPACITY
+    _EXECUTOR.shutdown(wait=False, cancel_futures=True)
+    with _LOCK:
+        _JOBS.clear()
+    _EXECUTOR = ThreadPoolExecutor(
+        max_workers=_MAX_ACTIVE_JOBS, thread_name_prefix="saturn-job"
+    )
+    _CAPACITY = threading.BoundedSemaphore(_MAX_ACTIVE_JOBS + _MAX_QUEUED_JOBS)
+
+
+def prune_jobs(*, now: float | None = None, ttl: int | None = None) -> None:
+    now = time.time() if now is None else now
+    ttl = _JOB_TTL if ttl is None else ttl
+    with _LOCK:
+        expired = [
+            job_id for job_id, job in _JOBS.items()
+            if job.completed_at is not None and now - job.completed_at > ttl
+        ]
+        for job_id in expired:
+            _JOBS.pop(job_id, None)
+        completed = sorted(
+            (job for job in _JOBS.values() if job.completed_at is not None),
+            key=lambda job: job.completed_at or 0,
+        )
+        for job in completed[:-_MAX_RETAINED_JOBS]:
+            _JOBS.pop(job.id, None)
+
+
+def register_managed_result(path: Path, *, created_at: float | None = None) -> None:
+    with _LOCK:
+        _MANAGED_RESULTS[path.resolve()] = time.time() if created_at is None else created_at
+
+
+def cleanup_expired(
+    *, upload_dir: Path, upload_ttl: int, job_ttl: int, result_ttl: int,
+    now: float | None = None,
+) -> None:
+    """Remove stale viewer-owned artifacts without touching operator files."""
+    now = time.time() if now is None else now
+    if upload_dir.is_dir():
+        for child in upload_dir.iterdir():
+            try:
+                if now - child.stat().st_mtime > upload_ttl:
+                    shutil.rmtree(child) if child.is_dir() else child.unlink()
+            except FileNotFoundError:
+                pass
+    prune_jobs(now=now, ttl=job_ttl)
+    with _LOCK:
+        stale = [(path, born) for path, born in _MANAGED_RESULTS.items()
+                 if now - born > result_ttl]
+        for path, _ in stale:
+            for artifact in (path, path.with_suffix(".html")):
+                artifact.unlink(missing_ok=True)
+            _MANAGED_RESULTS.pop(path, None)
 
 
 def _new_id() -> str:
@@ -76,6 +147,11 @@ def get_job(job_id: str) -> Job | None:
 
 
 def start_job(kind: str, target: Callable[..., None], *args: Any, **kwargs: Any) -> Job:
+    prune_jobs()
+    capacity = _CAPACITY
+    executor = _EXECUTOR
+    if not capacity.acquire(blocking=False):
+        raise JobCapacityError("viewer job capacity is full; try again later")
     job = Job(id=_new_id(), kind=kind)
     with _LOCK:
         _JOBS[job.id] = job
@@ -94,8 +170,17 @@ def start_job(kind: str, target: Callable[..., None], *args: Any, **kwargs: Any)
                 message="".join(traceback.format_exception_only(type(e), e)).strip(),
                 completed_at=time.time(),
             )
+        finally:
+            capacity.release()
+            prune_jobs()
 
-    threading.Thread(target=_run, daemon=True, name=f"saturn-{kind}-{job.id}").start()
+    try:
+        executor.submit(_run)
+    except Exception:
+        capacity.release()
+        with _LOCK:
+            _JOBS.pop(job.id, None)
+        raise
     return job
 
 
@@ -299,11 +384,17 @@ def analyze_upload(
         cmd += ["--llm", provider_spec]
 
     env = _build_subprocess_env(provider_spec, api_key)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
-    if result.returncode != 0:
-        raise RuntimeError(f"saturn analyze failed: {result.stderr[-500:]}")
-
-    _set(job_id, finding_id=finding_id, message="profile complete")
+    env.setdefault("SATURN_MAX_ROWS", os.environ.get("SATURN_VIEWER_MAX_ROWS", "1000000"))
+    env.setdefault("SATURN_MAX_COLUMNS", os.environ.get("SATURN_VIEWER_MAX_COLUMNS", "500"))
+    env.setdefault("SATURN_MAX_CELLS", os.environ.get("SATURN_VIEWER_MAX_CELLS", "50000000"))
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"saturn analyze failed: {result.stderr[-500:]}")
+        register_managed_result(findings_path)
+        _set(job_id, finding_id=finding_id, message="profile complete")
+    finally:
+        shutil.rmtree(upload_path.parent, ignore_errors=True)
 
 
 def analyze_hf(

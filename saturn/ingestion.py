@@ -13,6 +13,7 @@ Both adapters share a sample-based schema inference step so the caller can ask
 
 from __future__ import annotations
 
+import os
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -605,6 +606,19 @@ class FileAdapter(SourceAdapter):
                 # last-ditch: DuckDB can read almost anything we haven't caught
                 tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
                 df = _ensure_frame(pl.from_arrow(tbl))
+
+        limits = (
+            ("SATURN_MAX_ROWS", df.height, "row limit"),
+            ("SATURN_MAX_COLUMNS", df.width, "column limit"),
+            ("SATURN_MAX_CELLS", df.height * df.width, "cell limit"),
+        )
+        for variable, actual, label in limits:
+            raw = os.environ.get(variable)
+            if raw and actual > int(raw):
+                raise ValueError(
+                    f"parsed dataset exceeds configured {label}: "
+                    f"{actual:,} > {int(raw):,} ({variable})"
+                )
 
         self._df = df
         self._row_count = df.height
