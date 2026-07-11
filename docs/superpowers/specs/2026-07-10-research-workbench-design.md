@@ -52,4 +52,3 @@ Each phase is independently shippable and tested. The first user-visible
 milestone is a native Citewrite collection-analysis workspace whose aggregates
 link back to source citations. Later imported and extracted data use the same
 Saturn dataset/profile contracts and the same visualization studio.
-
