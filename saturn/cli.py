@@ -150,6 +150,17 @@ app = typer.Typer(
 console = Console()
 
 
+@app.command("helper")
+def helper_command(job: Path = typer.Argument(..., exists=True, dir_okay=False)) -> None:
+    """Run one isolated machine-readable profile or compare job."""
+    from .helper import HelperError, run_job
+
+    try:
+        run_job(job)
+    except HelperError:
+        raise typer.Exit(code=1)
+
+
 def _emit_outputs(
     data,
     *,
