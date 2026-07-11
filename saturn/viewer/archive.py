@@ -17,35 +17,45 @@ class ArchiveArtifact:
     notebook_path: Path
 
 
-def archive_path(directory: Path | None, artifact_id: str, suffix: str) -> Path | None:
-    """Resolve an allowlisted, top-level archive artifact or return ``None``."""
-    if directory is None or suffix not in {".html", ".ipynb"}:
+def resolve_archive_artifact(
+    directory: Path | None, artifact_id: str
+) -> ArchiveArtifact | None:
+    """Resolve a complete, canonical artifact pair inside the archive root."""
+    if directory is None:
         return None
     if _ARCHIVE_ID.fullmatch(artifact_id) is None:
         return None
     base = Path(directory).resolve()
-    candidate = (base / f"{artifact_id}{suffix}").resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError:
+    if not base.is_dir():
         return None
-    return candidate if candidate.is_file() else None
+    resolved: dict[str, Path] = {}
+    for suffix in (".html", ".ipynb"):
+        candidate = (base / f"{artifact_id}{suffix}").resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return None
+        if not candidate.is_file():
+            return None
+        resolved[suffix] = candidate
+    return ArchiveArtifact(
+        artifact_id,
+        resolved[".html"],
+        resolved[".ipynb"],
+    )
 
 
 def list_archive(directory: Path | None) -> list[ArchiveArtifact]:
     """List complete HTML/notebook pairs, excluding hidden or unsafe names."""
     if directory is None:
         return []
-    base = Path(directory)
+    base = Path(directory).resolve()
     if not base.is_dir():
         return []
     artifacts: list[ArchiveArtifact] = []
     for html_path in sorted(base.glob("*.html")):
         artifact_id = html_path.stem
-        if _ARCHIVE_ID.fullmatch(artifact_id) is None:
-            continue
-        notebook_path = base / f"{artifact_id}.ipynb"
-        if not notebook_path.is_file():
-            continue
-        artifacts.append(ArchiveArtifact(artifact_id, html_path, notebook_path))
+        artifact = resolve_archive_artifact(base, artifact_id)
+        if artifact is not None:
+            artifacts.append(artifact)
     return artifacts

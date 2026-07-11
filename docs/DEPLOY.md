@@ -68,10 +68,12 @@ Environment knobs: `ANTHROPIC_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_D
 
 The deployment also sets `SATURN_LEGACY_ARCHIVE_DIR` to the preserved historical
 artifact directory. Only complete, top-level `<safe-id>.html` and `<safe-id>.ipynb`
-pairs are indexed. Historical HTML is returned with a sandbox content security
-policy; notebooks download as attachments. Files with other extensions, nested
-paths and traversal attempts are never served. Dot-prefixed historical IDs are
-allowed only when they match the same strict character allowlist and complete pair.
+pairs are indexed or served. Both paths are canonicalized and must remain regular
+files inside the archive root, which rejects broken links and symlink escapes.
+Historical HTML is returned under an offline-only sandbox content security policy;
+notebooks download as attachments. Files with other extensions, nested paths and
+traversal attempts are never served. Dot-prefixed historical IDs are allowed only
+when they match the same strict character allowlist and complete pair.
 
 Data flow:
 

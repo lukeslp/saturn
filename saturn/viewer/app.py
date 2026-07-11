@@ -204,20 +204,13 @@ def create_app(
     def view(id: str):
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
-            from .archive import archive_path, list_archive
+            from .archive import resolve_archive_artifact
 
-            legacy_html = archive_path(
-                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".html"
+            artifact = resolve_archive_artifact(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id
             )
-            legacy_notebook = archive_path(
-                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".ipynb"
-            )
-            if legacy_html is None or legacy_notebook is None:
+            if artifact is None:
                 abort(404)
-            artifact = next(
-                item for item in list_archive(app.config["SATURN_LEGACY_ARCHIVE_DIR"])
-                if item.id == id
-            )
             return render_template("archive.html.j2", artifact=artifact)
         doc = load_findings(path)
         view_mode = request.args.get("view", "report").lower()
@@ -342,15 +335,15 @@ def create_app(
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
             from flask import send_file
-            from .archive import archive_path
+            from .archive import resolve_archive_artifact
 
-            legacy_path = archive_path(
-                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".ipynb"
+            artifact = resolve_archive_artifact(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id
             )
-            if legacy_path is None:
+            if artifact is None:
                 abort(404)
             return send_file(
-                legacy_path,
+                artifact.notebook_path,
                 mimetype="application/x-ipynb+json",
                 as_attachment=True,
                 download_name=f"{id}.ipynb",
@@ -374,22 +367,28 @@ def create_app(
 
         json_path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if json_path is None or not json_path.is_file():
-            from .archive import archive_path
+            from .archive import resolve_archive_artifact
 
-            legacy_path = archive_path(
-                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id, ".html"
+            artifact = resolve_archive_artifact(
+                app.config["SATURN_LEGACY_ARCHIVE_DIR"], id
             )
-            if legacy_path is None:
+            if artifact is None:
                 abort(404)
             response = send_file(
-                legacy_path,
+                artifact.html_path,
                 mimetype="text/html",
                 as_attachment=False,
                 download_name=f"{id}.html",
             )
             # Historical reports are preserved verbatim. Sandbox them so any
             # legacy active content cannot inherit the viewer's origin powers.
-            response.headers["Content-Security-Policy"] = "sandbox allow-scripts"
+            response.headers["Content-Security-Policy"] = (
+                "sandbox allow-scripts; default-src 'none'; "
+                "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                "img-src data:; connect-src 'none'; frame-src 'none'; "
+                "font-src 'none'; media-src 'none'; object-src 'none'; "
+                "form-action 'none'; base-uri 'none'"
+            )
             return response
         html_path = json_path.with_suffix(".html")
         if not html_path.is_file():
