@@ -119,6 +119,20 @@ def test_analyze_hf_empty_repo(client):
     assert "HuggingFace repo" in body
 
 
+def test_analyze_hf_capacity_redirects_with_flash(client, monkeypatch):
+    from saturn.viewer.runner import JobCapacityError
+
+    monkeypatch.setattr(
+        "saturn.viewer.app.start_job",
+        lambda *args, **kwargs: (_ for _ in ()).throw(JobCapacityError("viewer busy")),
+    )
+    resp = client.post(
+        "/analyze-hf", data={"repo": "owner/dataset"}, follow_redirects=True
+    )
+    assert resp.status_code == 200
+    assert "viewer busy" in resp.get_data(as_text=True)
+
+
 # ---------- backfill ---------------------------------------------------------
 
 
@@ -161,6 +175,21 @@ def test_backfill_happy_path(client, tmp_path, monkeypatch):
     assert finding_id == "demo"
     assert provider == "anthropic"
     assert api_key is None
+
+
+def test_backfill_capacity_redirects_to_finding_with_flash(client, tmp_path, monkeypatch):
+    from saturn.viewer.runner import JobCapacityError
+
+    (tmp_path / "demo.json").write_text("{}")
+    monkeypatch.setattr(
+        "saturn.viewer.app.start_job",
+        lambda *args, **kwargs: (_ for _ in ()).throw(JobCapacityError("viewer busy")),
+    )
+    resp = client.post("/backfill/demo")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/view/demo")
+    with client.session_transaction() as session:
+        assert ("error", "viewer busy") in session["_flashes"]
 
 
 @pytest.mark.parametrize("persisted_metadata", [True, False])

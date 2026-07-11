@@ -170,6 +170,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 job_ttl=int(os.environ.get("SATURN_JOB_TTL_SECONDS", "86400")),
                 result_ttl=int(os.environ.get("SATURN_RESULT_TTL_SECONDS", "86400")),
                 now=now,
+                findings_dir=app.config["SATURN_FINDINGS_DIR"],
             )
             janitor_last_run = now
 
@@ -461,7 +462,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 provider,
                 api_key,
             )
-        except ValueError as e:
+        except (ValueError, JobCapacityError) as e:
             flash(str(e), "error")
             return redirect(url_for("index"))
         return redirect(url_for("job_view", job_id=job.id))
@@ -475,14 +476,18 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         if not provider:
             flash("Pick a provider (or supply an API key) to generate a summary.", "error")
             return redirect(url_for("view", id=id))
-        job = start_job(
-            "backfill",
-            backfill_insights,
-            app.config["SATURN_FINDINGS_DIR"],
-            id,
-            provider,
-            api_key,
-        )
+        try:
+            job = start_job(
+                "backfill",
+                backfill_insights,
+                app.config["SATURN_FINDINGS_DIR"],
+                id,
+                provider,
+                api_key,
+            )
+        except JobCapacityError as e:
+            flash(str(e), "error")
+            return redirect(url_for("view", id=id))
         return redirect(url_for("job_view", job_id=job.id))
 
     # ---------- job status --------------------------------------------------

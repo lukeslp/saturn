@@ -13,6 +13,7 @@ public contract.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -63,7 +64,8 @@ _MAX_RETAINED_JOBS = int(os.environ.get("SATURN_MAX_RETAINED_JOBS", "200"))
 _JOB_TTL = int(os.environ.get("SATURN_JOB_TTL_SECONDS", "86400"))
 _EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_ACTIVE_JOBS, thread_name_prefix="saturn-job")
 _CAPACITY = threading.BoundedSemaphore(_MAX_ACTIVE_JOBS + _MAX_QUEUED_JOBS)
-_MANAGED_RESULTS: dict[Path, float] = {}
+_MAX_MANAGED_RESULTS = int(os.environ.get("SATURN_MAX_MANAGED_RESULTS", "1000"))
+_RESULT_MANIFEST = ".saturn-viewer-results.json"
 
 
 class JobCapacityError(RuntimeError):
@@ -100,14 +102,59 @@ def prune_jobs(*, now: float | None = None, ttl: int | None = None) -> None:
             _JOBS.pop(job.id, None)
 
 
-def register_managed_result(path: Path, *, created_at: float | None = None) -> None:
+def _read_result_manifest(findings_dir: Path) -> list[dict[str, Any]]:
+    path = findings_dir / _RESULT_MANIFEST
+    try:
+        payload = json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return []
+    results = payload.get("results", []) if isinstance(payload, dict) else []
+    return [entry for entry in results if isinstance(entry, dict)]
+
+
+def _write_result_manifest(findings_dir: Path, entries: list[dict[str, Any]]) -> None:
+    findings_dir.mkdir(parents=True, exist_ok=True)
+    path = findings_dir / _RESULT_MANIFEST
+    temp = findings_dir / f".{_RESULT_MANIFEST}.{uuid.uuid4().hex}.tmp"
+    data = json.dumps({"version": 1, "results": entries}, indent=2) + "\n"
+    try:
+        with temp.open("w") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def reserve_managed_result(path: Path, *, created_at: float | None = None) -> None:
+    """Durably reserve a new viewer-owned result before a subprocess writes it."""
+    path = path.resolve()
+    if path.suffix != ".json" or path.name == _RESULT_MANIFEST:
+        raise ValueError(f"invalid managed result path: {path}")
+    html_path = path.with_suffix(".html")
     with _LOCK:
-        _MANAGED_RESULTS[path.resolve()] = time.time() if created_at is None else created_at
+        if path.exists() or html_path.exists():
+            raise FileExistsError(f"refusing to adopt preexisting result: {path.name}")
+        entries = _read_result_manifest(path.parent)
+        if any(entry.get("name") == path.name for entry in entries):
+            raise FileExistsError(f"result is already reserved: {path.name}")
+        entries.append({
+            "name": path.name,
+            "created_at": time.time() if created_at is None else created_at,
+        })
+        entries.sort(key=lambda entry: float(entry.get("created_at", 0)))
+        dropped = entries[:-_MAX_MANAGED_RESULTS]
+        for entry in dropped:
+            dropped_path = path.parent / entry["name"]
+            dropped_path.unlink(missing_ok=True)
+            dropped_path.with_suffix(".html").unlink(missing_ok=True)
+        _write_result_manifest(path.parent, entries[-_MAX_MANAGED_RESULTS:])
 
 
 def cleanup_expired(
     *, upload_dir: Path, upload_ttl: int, job_ttl: int, result_ttl: int,
-    now: float | None = None,
+    now: float | None = None, findings_dir: Path | None = None,
 ) -> None:
     """Remove stale viewer-owned artifacts without touching operator files."""
     now = time.time() if now is None else now
@@ -119,13 +166,33 @@ def cleanup_expired(
             except FileNotFoundError:
                 pass
     prune_jobs(now=now, ttl=job_ttl)
+    findings_dirs = {findings_dir or (upload_dir.parent / "findings")}
     with _LOCK:
-        stale = [(path, born) for path, born in _MANAGED_RESULTS.items()
-                 if now - born > result_ttl]
-        for path, _ in stale:
-            for artifact in (path, path.with_suffix(".html")):
-                artifact.unlink(missing_ok=True)
-            _MANAGED_RESULTS.pop(path, None)
+        for findings_dir in findings_dirs:
+            manifest_path = findings_dir / _RESULT_MANIFEST
+            if not manifest_path.is_file():
+                continue
+            entries = _read_result_manifest(findings_dir)
+            retained = []
+            for entry in entries:
+                name = entry.get("name")
+                try:
+                    born = float(entry.get("created_at"))
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    not isinstance(name, str)
+                    or Path(name).name != name
+                    or not name.endswith(".json")
+                ):
+                    continue
+                if now - born > result_ttl:
+                    path = findings_dir / name
+                    path.unlink(missing_ok=True)
+                    path.with_suffix(".html").unlink(missing_ok=True)
+                else:
+                    retained.append(entry)
+            _write_result_manifest(findings_dir, retained[-_MAX_MANAGED_RESULTS:])
 
 
 def _new_id() -> str:
@@ -365,33 +432,29 @@ def analyze_upload(
     api_key: str | None = None,
 ) -> None:
     """Run saturn CLI against an uploaded file. Provider spec triggers --llm."""
-    if not _SAFE_ID.match(finding_id):
-        raise ValueError(f"unsafe finding id: {finding_id!r}")
-    if upload_path.suffix.lower() not in _UPLOAD_EXTENSIONS:
-        raise ValueError(f"unsupported file type: {upload_path.suffix}")
-
-    _set(job_id, message=f"profiling {upload_path.name}")
-
-    findings_path = findings_dir / f"{finding_id}.json"
-    html_path = findings_dir / f"{finding_id}.html"
-
-    cmd = [
-        "saturn", "analyze", str(upload_path),
-        "--out", str(html_path),
-        "--findings", str(findings_path),
-    ]
-    if provider_spec:
-        cmd += ["--llm", provider_spec]
-
-    env = _build_subprocess_env(provider_spec, api_key)
-    env.setdefault("SATURN_MAX_ROWS", os.environ.get("SATURN_VIEWER_MAX_ROWS", "1000000"))
-    env.setdefault("SATURN_MAX_COLUMNS", os.environ.get("SATURN_VIEWER_MAX_COLUMNS", "500"))
-    env.setdefault("SATURN_MAX_CELLS", os.environ.get("SATURN_VIEWER_MAX_CELLS", "50000000"))
     try:
+        if not _SAFE_ID.match(finding_id):
+            raise ValueError(f"unsafe finding id: {finding_id!r}")
+        if upload_path.suffix.lower() not in _UPLOAD_EXTENSIONS:
+            raise ValueError(f"unsupported file type: {upload_path.suffix}")
+        _set(job_id, message=f"profiling {upload_path.name}")
+        findings_path = findings_dir / f"{finding_id}.json"
+        html_path = findings_dir / f"{finding_id}.html"
+        reserve_managed_result(findings_path)
+        cmd = [
+            "saturn", "analyze", str(upload_path),
+            "--out", str(html_path),
+            "--findings", str(findings_path),
+        ]
+        if provider_spec:
+            cmd += ["--llm", provider_spec]
+        env = _build_subprocess_env(provider_spec, api_key)
+        env["SATURN_MAX_ROWS"] = os.environ.get("SATURN_VIEWER_MAX_ROWS", "1000000")
+        env["SATURN_MAX_COLUMNS"] = os.environ.get("SATURN_VIEWER_MAX_COLUMNS", "500")
+        env["SATURN_MAX_CELLS"] = os.environ.get("SATURN_VIEWER_MAX_CELLS", "50000000")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
         if result.returncode != 0:
             raise RuntimeError(f"saturn analyze failed: {result.stderr[-500:]}")
-        register_managed_result(findings_path)
         _set(job_id, finding_id=finding_id, message="profile complete")
     finally:
         shutil.rmtree(upload_path.parent, ignore_errors=True)
@@ -415,6 +478,7 @@ def analyze_hf(
 
     findings_path = findings_dir / f"{finding_id}.json"
     html_path = findings_dir / f"{finding_id}.html"
+    reserve_managed_result(findings_path)
 
     cmd = [
         "saturn", "huggingface", repo,
