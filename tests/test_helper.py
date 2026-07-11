@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -224,6 +225,70 @@ def test_entrypoint_job_resolution_errors_are_single_structured_events(
     assert len(events) == 1
     assert events[0]["event"] == "error"
     assert events[0]["phase"] == code
+
+
+def test_unreadable_regular_job_is_one_error_without_progress_or_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+):
+    from saturn.helper import HelperError, run_job
+
+    job_path = _job(tmp_path, "profile", [])
+    original_read_text = Path.read_text
+
+    def unreadable_job(path: Path, *args, **kwargs):
+        if path == job_path:
+            raise OSError("permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable_job)
+    with pytest.raises(HelperError) as raised:
+        run_job(job_path)
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert raised.value.code == "job_unreadable"
+    assert [(event["event"], event["phase"]) for event in events] == [
+        ("error", "job_unreadable"),
+    ]
+    assert not (tmp_path / "result.json").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission integration")
+def test_permission_denied_job_is_one_unreadable_error(tmp_path: Path):
+    job_path = _job(tmp_path, "profile", [])
+    job_path.chmod(0)
+    try:
+        try:
+            job_path.read_text(encoding="utf-8")
+        except PermissionError:
+            pass
+        else:
+            pytest.skip("test process bypasses file permission bits")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "saturn.entrypoint", "helper", str(job_path)],
+            text=True, capture_output=True, cwd=Path(__file__).parents[1], check=False,
+        )
+    finally:
+        job_path.chmod(0o600)
+
+    assert result.returncode != 0
+    assert result.stderr == ""
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [(event["event"], event["phase"]) for event in events] == [
+        ("error", "job_unreadable"),
+    ]
+    assert not (tmp_path / "result.json").exists()
+
+
+def test_malformed_job_json_keeps_decode_error_code(tmp_path: Path):
+    job_path = tmp_path / "job.json"
+    job_path.write_text("{not json", encoding="utf-8")
+
+    result = runner.invoke(app, ["helper", str(job_path)])
+
+    assert result.exit_code != 0
+    assert json.loads(result.stdout.splitlines()[-1])["phase"] == "malformed_job_json"
+    assert not (tmp_path / "result.json").exists()
 
 
 def test_module_subprocess_emits_only_ndjson(tmp_path: Path):

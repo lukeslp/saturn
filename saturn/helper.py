@@ -191,11 +191,15 @@ def run_job(job_file: Path) -> Path:
         root = job_file.parent
         for signum in (signal.SIGTERM, signal.SIGINT):
             previous_handlers[signum] = signal.signal(signum, cancel)
-        _event("progress", "validate", 0.05, "validating job")
         try:
-            raw = json.loads(job_file.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise HelperError("malformed_job_json", f"could not read job: {exc}") from exc
+            job_text = job_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HelperError("job_unreadable", f"could not read job: {exc}") from exc
+        try:
+            raw = json.loads(job_text)
+        except json.JSONDecodeError as exc:
+            raise HelperError("malformed_job_json", f"could not decode job: {exc}") from exc
+        _event("progress", "validate", 0.05, "validating job")
         job, input_paths, output = _validate(raw, root)
         _event("progress", "read", 0.2, "reading input")
         frames = [_load(path, item["format"]) for path, item in zip(input_paths, job["inputs"])]
