@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import polars as pl
 
 from saturn.profilers import profile_dataframe
@@ -62,3 +64,15 @@ def test_profile_dataframe_handles_nulls():
     assert results["x"].n == 5
     assert results["x"].n_null == 2
     assert results["y"].n_null == 2
+
+
+def test_profile_dataframe_treats_nan_and_infinity_as_null():
+    df = pl.DataFrame({"x": [1.0, float("nan"), float("inf"), float("-inf"), None, 3.0]})
+
+    result = profile_dataframe(df, {"x": "numeric"})[0]
+
+    assert result.n == 6
+    assert result.n_null == 4
+    assert result.n_unique == 2
+    assert result.stats["mean"] == 2.0
+    json.dumps(result.to_dict(), allow_nan=False)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,8 +47,9 @@ class ReportData:
     overview_chart_html: str | None = None
     language_chart_html: str | None = None
     correlation_chart_html: str | None = None
-    correlation_matrix: list[list[float]] | None = None
+    correlation_matrix: list[list[float | None]] | None = None
     correlation_labels: list[str] | None = None
+    correlation_pair_counts: list[list[int]] | None = None
     language_counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     insight_bundle: "InsightBundle | None" = None
@@ -111,6 +113,12 @@ class ReportData:
             out["attributions"] = attributions
         if self.insight_bundle is not None:
             out["insights"] = self.insight_bundle.to_dict()
+        if self.correlation_matrix is not None:
+            out["correlations"] = {
+                "labels": self.correlation_labels,
+                "matrix": self.correlation_matrix,
+                "pair_counts": self.correlation_pair_counts,
+            }
         return out
 
     @classmethod
@@ -204,6 +212,7 @@ def assemble(
     schema: dict[str, str],
     results: list[ProfileResult],
     mode: str = "full",
+    correlation_frame: Any | None = None,
 ) -> ReportData:
     meta = DatasetMeta(
         source=source,
@@ -230,20 +239,63 @@ def assemble(
     data.language_counts = merged
     data.language_chart_html = language_chart(merged)
 
-    # correlation across numeric columns (sample-based)
-    numeric = [r for r in results if r.kind == "numeric" and r.extras.get("sample")]
-    if len(numeric) >= 2:
-        max_len = min(len(r.extras["sample"]) for r in numeric)
-        mat = np.vstack([np.asarray(r.extras["sample"][:max_len]) for r in numeric])
-        corr = np.corrcoef(mat)
-        labels = [r.column for r in numeric]
-        data.correlation_matrix = corr.tolist()
+    # Correlations must share row alignment. Sample the source frame once, then
+    # use pairwise-complete rows for each coefficient instead of independently
+    # compacted per-column profiler samples.
+    labels = [r.column for r in results if r.kind == "numeric"]
+    if correlation_frame is not None and len(labels) >= 2:
+        corr, pair_counts = _aligned_correlations(correlation_frame, labels, seed)
+        data.correlation_matrix = corr
         data.correlation_labels = labels
+        data.correlation_pair_counts = pair_counts
         data.correlation_chart_html = correlation_heatmap(
-            corr.tolist(), labels
+            corr, labels
         )
 
     return data
+
+
+_CORRELATION_SAMPLE_K = 5_000
+
+
+def _aligned_correlations(
+    frame: Any, labels: list[str], seed: int
+) -> tuple[list[list[float | None]], list[list[int]]]:
+    """Return finite pairwise correlations and observation counts from one sample."""
+    import polars as pl
+
+    if not isinstance(frame, pl.DataFrame):
+        frame = pl.DataFrame(frame)
+    present = [label for label in labels if label in frame.columns]
+    sampled = frame.select(present)
+    if sampled.height > _CORRELATION_SAMPLE_K:
+        sampled = sampled.sample(n=_CORRELATION_SAMPLE_K, seed=seed, shuffle=True)
+
+    arrays: list[np.ndarray] = []
+    for label in labels:
+        if label not in sampled.columns:
+            arrays.append(np.full(sampled.height, np.nan))
+            continue
+        values = sampled[label].cast(pl.Float64, strict=False).to_numpy()
+        arrays.append(np.asarray(values, dtype=float))
+
+    matrix: list[list[float | None]] = []
+    counts: list[list[int]] = []
+    for left in arrays:
+        matrix_row: list[float | None] = []
+        count_row: list[int] = []
+        for right in arrays:
+            valid = np.isfinite(left) & np.isfinite(right)
+            count = int(valid.sum())
+            count_row.append(count)
+            if count < 2 or left[valid].std() == 0 or right[valid].std() == 0:
+                matrix_row.append(None)
+                continue
+            value = float(np.corrcoef(left[valid], right[valid])[0, 1])
+            matrix_row.append(value if math.isfinite(value) else None)
+        matrix.append(matrix_row)
+        counts.append(count_row)
+    return matrix, counts
 
 
 def render_html(data: ReportData, output_path: Path) -> Path:

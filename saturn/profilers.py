@@ -81,6 +81,11 @@ def _numeric_stats(a) -> tuple[dict, dict]:
     import numpy as np
     from scipy import stats as scs
 
+    a = np.asarray(a, dtype=float)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return {}, {}
+
     q1, q3 = np.quantile(a, [0.25, 0.75])
     iqr = q3 - q1
     outlier_mask = (a < q1 - 1.5 * iqr) | (a > q3 + 1.5 * iqr)
@@ -216,10 +221,10 @@ def _profile_numeric_series(column: str, s: "pl.Series") -> ProfileResult:
     import polars as pl
 
     n = s.len()
-    n_null = s.null_count()
+    numeric = s.cast(pl.Float64, strict=False)
+    clean = numeric.filter(numeric.is_finite().fill_null(False))
+    n_null = n - clean.len()
     result = ProfileResult(column=column, kind="numeric", n=n, n_null=n_null)
-
-    clean = s.drop_nulls().cast(pl.Float64, strict=False).drop_nulls()
     if clean.len() == 0:
         result.alerts.append(Alert("warn", "all_null", "column is entirely null or non-numeric"))
         return result
@@ -631,13 +636,18 @@ def _dict_numeric(column: str, values: Iterable[Any]) -> ProfileResult:
     n_null = 0
     for v in values:
         n += 1
-        if v is None or (isinstance(v, float) and math.isnan(v)):
+        if v is None:
             n_null += 1
             continue
         try:
-            arr_all.append(float(v))
+            numeric = float(v)
         except (TypeError, ValueError):
             n_null += 1
+            continue
+        if not math.isfinite(numeric):
+            n_null += 1
+            continue
+        arr_all.append(numeric)
 
     result = ProfileResult(column=column, kind="numeric", n=n, n_null=n_null)
     if not arr_all:

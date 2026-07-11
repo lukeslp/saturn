@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from saturn.profilers import profile_columns
+import polars as pl
+
+from saturn.profilers import profile_columns, profile_dataframe
 from saturn.report import assemble, render_html, write_findings
 
 
@@ -49,6 +51,31 @@ def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
     assert cols["image_alt_length"]["kind"] == "numeric"
     assert cols["alt_text"]["kind"] == "text"
     assert cols["author_handle"]["kind"] == "categorical"
+
+
+def test_correlation_uses_pairwise_complete_source_rows_and_records_counts():
+    rows = pl.DataFrame(
+        {
+            "x": [1.0, 2.0, None, 4.0],
+            "y": [1.0, None, 3.0, 4.0],
+        }
+    )
+    schema = {"x": "numeric", "y": "numeric"}
+    results = profile_dataframe(rows, schema)
+
+    report = assemble(
+        source="test://correlation",
+        row_count=4,
+        sampled_rows=4,
+        seed=42,
+        schema=schema,
+        results=results,
+        correlation_frame=rows,
+    )
+
+    assert report.correlation_labels == ["x", "y"]
+    assert report.correlation_matrix == [[1.0, 1.0], [1.0, 1.0]]
+    assert report.correlation_pair_counts == [[3, 2], [2, 3]]
 
 
 def test_to_findings_includes_insight_bundle_when_present():

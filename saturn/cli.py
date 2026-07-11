@@ -230,6 +230,7 @@ def _run(
         sampled_rows = df.height
         effective_count = df.height
         mode = "full"
+        correlation_frame = df
     else:
         with console.status("scanning schema", spinner="dots"):
             schema = adapter.schema()
@@ -249,6 +250,7 @@ def _run(
         row_count = effective_count
         sampled_rows = len(sample)
         mode = "sample"
+        correlation_frame = sample
 
     data = assemble(
         source=adapter.source,
@@ -258,6 +260,7 @@ def _run(
         schema=schema.columns,
         results=results,
         mode=mode,
+        correlation_frame=correlation_frame,
     )
 
     _print_summary(schema.columns, results, effective_count)
