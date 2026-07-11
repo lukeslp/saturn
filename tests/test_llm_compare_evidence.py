@@ -58,6 +58,9 @@ def test_compare_column_evidence_projects_both_sides_and_delta():
     ev = compare_column_evidence(report.columns[0], a_label="curated", b_label="firehose")
     assert ev["column"] == "alt_text"
     assert ev["kind"] == "text"
+    assert ev["kind_a"] == "text"
+    assert ev["kind_b"] == "text"
+    assert ev["compatible"] is True
     assert ev["a"]["label"] == "curated"
     assert ev["a"]["stats"]["len_mean"] == 200.0
     assert ev["b"]["label"] == "firehose"
@@ -66,6 +69,27 @@ def test_compare_column_evidence_projects_both_sides_and_delta():
     assert ev["delta"]["top_value_jaccard"] == 0.45
     # __engine stripped
     assert "__engine" not in ev["a"]["language_counts"]
+
+
+def test_compare_column_evidence_exposes_schema_drift():
+    numeric = ProfileResult(
+        column="value", kind="numeric", n=2, n_null=0, n_unique=2,
+        stats={"mean": 1.5}, extras={}, alerts=[],
+    )
+    text = ProfileResult(
+        column="value", kind="text", n=2, n_null=0, n_unique=2,
+        stats={"len_mean": 3.5}, extras={}, alerts=[],
+    )
+    cc = ColumnComparison(
+        column="value", kind="numeric", a=numeric, b=text, delta={},
+        notes=["schema drift"], kind_a="numeric", kind_b="text", compatible=False,
+    )
+
+    ev = compare_column_evidence(cc, a_label="A", b_label="B")
+
+    assert ev["kind_a"] == "numeric"
+    assert ev["kind_b"] == "text"
+    assert ev["compatible"] is False
 
 
 def test_compare_evidence_honors_redaction_env(monkeypatch):
@@ -84,6 +108,35 @@ def test_compare_evidence_honors_redaction_env(monkeypatch):
     ev_redacted = compare_column_evidence(cc, a_label="A", b_label="B")
     assert "top_value" not in ev_redacted["a"]["stats"]
     assert ev_redacted["a"]["stats"]["entropy"] == 1.0
+
+
+def test_compare_evidence_redacts_literal_delta_fields(monkeypatch):
+    cat_a = ProfileResult(
+        column="author", kind="categorical", n=100, n_null=0, n_unique=3,
+        stats={"top_value": "alice@example.com", "entropy": 1.0}, extras={}, alerts=[],
+    )
+    cat_b = ProfileResult(
+        column="author", kind="categorical", n=100, n_null=0, n_unique=3,
+        stats={"top_value": "bob@example.com", "entropy": 1.2}, extras={}, alerts=[],
+    )
+    cc = ColumnComparison(
+        column="author",
+        kind="categorical",
+        a=cat_a,
+        b=cat_b,
+        delta={
+            "top_value_a": "alice@example.com",
+            "top_value_b": "bob@example.com",
+            "entropy_delta": 0.2,
+        },
+    )
+
+    monkeypatch.setenv("SATURN_REDACT_EVIDENCE_VALUES", "1")
+    ev = compare_column_evidence(cc, a_label="A", b_label="B")
+
+    assert "top_value_a" not in ev["delta"]
+    assert "top_value_b" not in ev["delta"]
+    assert ev["delta"]["entropy_delta"] == 0.2
 
 
 def test_compare_column_evidence_handles_missing_side():

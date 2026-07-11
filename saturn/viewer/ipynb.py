@@ -31,6 +31,11 @@ NBFORMAT = 4
 NBFORMAT_MINOR = 5
 
 
+def _py_literal(value: object) -> str:
+    """Return a Python source literal for untrusted findings text."""
+    return repr(str(value))
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex[:8]
 
@@ -111,7 +116,7 @@ def _profile_to_ipynb(doc) -> dict[str, Any]:
     load_code = (
         "# Load the findings sidecar that ships alongside this notebook.\n"
         "import json\n"
-        f"findings = json.load(open('{doc.id}.json'))\n"
+        f"findings = json.load(open({_py_literal(doc.id + '.json')}))\n"
         "print(f\"{len(findings['columns'])} columns, \"\n"
         "      f\"{findings['meta']['row_count']:,} rows\")"
     )
@@ -150,7 +155,7 @@ def _profile_to_ipynb(doc) -> dict[str, Any]:
 
         stats_code = (
             "from pprint import pprint\n"
-            f"col = next(c for c in findings['columns'] if c['column'] == '{c['column']}')\n"
+            f"col = next(c for c in findings['columns'] if c['column'] == {_py_literal(c['column'])})\n"
             "pprint({\n"
             "    'n': col['n'],\n"
             "    'null_rate': col['null_rate'],\n"
@@ -205,7 +210,7 @@ def _compare_to_ipynb(doc) -> dict[str, Any]:
 
     cells.append(_code_lines(
         "import json\n"
-        f"compare = json.load(open('{doc.id}.json'))\n"
+        f"compare = json.load(open({_py_literal(doc.id + '.json')}))\n"
         "print(len(compare['columns']), 'columns,', len(compare['divergences']), 'divergences')"
     ))
 
@@ -229,7 +234,7 @@ def _compare_to_ipynb(doc) -> dict[str, Any]:
             head += f"\n\n> {ci.get('narrative', '')}\n\n*{ci.get('model', '?')}*"
         cells.append(_md_lines(head))
         cells.append(_code_lines(
-            f"col = next(c for c in compare['columns'] if c['column'] == '{c['column']}')\n"
+            f"col = next(c for c in compare['columns'] if c['column'] == {_py_literal(c['column'])})\n"
             "from pprint import pprint\n"
             "pprint(col['delta'])"
         ))
@@ -249,15 +254,15 @@ def _plot_for(col: dict[str, Any]) -> str | None:
             return None
         return (
             "import matplotlib.pyplot as plt\n"
-            f"col = next(c for c in findings['columns'] if c['column'] == '{name}')\n"
+            f"col = next(c for c in findings['columns'] if c['column'] == {_py_literal(name)})\n"
             "hist = col['extras']['histogram']\n"
             "edges = hist['edges']; counts = hist['counts']\n"
             "centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(counts))]\n"
             "fig, ax = plt.subplots(figsize=(8, 3.5))\n"
             "ax.bar(centers, counts, width=(edges[1]-edges[0]) * 0.9)\n"
             "ax.axvline(col['stats'].get('median', 0), linestyle='--', color='black', label='median')\n"
-            f"ax.set_title('{name} distribution')\n"
-            f"ax.set_xlabel('{name}')\n"
+            f"ax.set_title({_py_literal(name + ' distribution')})\n"
+            f"ax.set_xlabel({_py_literal(name)})\n"
             "ax.set_ylabel('rows')\n"
             "ax.legend()\n"
             "plt.tight_layout(); plt.show()"
@@ -269,13 +274,13 @@ def _plot_for(col: dict[str, Any]) -> str | None:
             return None
         return (
             "import matplotlib.pyplot as plt\n"
-            f"col = next(c for c in findings['columns'] if c['column'] == '{name}')\n"
+            f"col = next(c for c in findings['columns'] if c['column'] == {_py_literal(name)})\n"
             "tv = col['extras']['top_values'][:15]\n"
             "labels = [str(t[0]) for t in tv][::-1]\n"
             "vals = [t[1] for t in tv][::-1]\n"
             "fig, ax = plt.subplots(figsize=(8, max(2.5, 0.3 * len(labels))))\n"
             "ax.barh(labels, vals)\n"
-            f"ax.set_title('{name} — top values')\n"
+            f"ax.set_title({_py_literal(name + ' — top values')})\n"
             "ax.set_xlabel('rows')\n"
             "plt.tight_layout(); plt.show()"
         )
@@ -286,13 +291,13 @@ def _plot_for(col: dict[str, Any]) -> str | None:
             return None
         return (
             "import matplotlib.pyplot as plt\n"
-            f"col = next(c for c in findings['columns'] if c['column'] == '{name}')\n"
+            f"col = next(c for c in findings['columns'] if c['column'] == {_py_literal(name)})\n"
             "lh = col['extras']['length_histogram']\n"
             "edges = lh['edges']; counts = lh['counts']\n"
             "centers = [(edges[i] + edges[i+1]) / 2 for i in range(len(counts))]\n"
             "fig, ax = plt.subplots(figsize=(8, 3.5))\n"
             "ax.bar(centers, counts, width=(edges[1]-edges[0]) * 0.9)\n"
-            f"ax.set_title('{name} — character-length distribution')\n"
+            f"ax.set_title({_py_literal(name + ' — character-length distribution')})\n"
             "ax.set_xlabel('chars')\n"
             "ax.set_ylabel('rows')\n"
             "plt.tight_layout(); plt.show()"

@@ -50,6 +50,35 @@ def test_compare_dataframes_produces_deltas():
     assert length.delta["mean_delta"] < 0
 
 
+def test_compare_dataframes_treats_numeric_to_text_as_schema_drift():
+    df_a = pl.DataFrame({"value": [1, 2, 3, 4]})
+    df_b = pl.DataFrame({"value": ["one", "two", "three", "four"]})
+
+    report = compare_dataframes(
+        df_a,
+        df_b,
+        label_a="numeric",
+        label_b="text",
+        source_a="test://numeric",
+        source_b="test://text",
+        schema_a={"value": "numeric"},
+        schema_b={"value": "text"},
+    )
+
+    value = report.columns[0]
+    assert value.a is not None and value.a.kind == "numeric"
+    assert value.b is not None and value.b.kind == "text"
+    assert value.kind_a == "numeric"
+    assert value.kind_b == "text"
+    assert value.compatible is False
+    assert value.delta == {}
+    assert "schema drift" in value.notes
+
+    divergence = report.divergence_summary(k=1)[0]
+    assert divergence["column"] == "value"
+    assert divergence["signals"] == ["schema drift: numeric → text"]
+
+
 def test_render_compare_html(tmp_path: Path):
     df_a = pl.DataFrame({"x": list(range(50)), "g": ["p"] * 50})
     df_b = pl.DataFrame({"x": list(range(25, 75)), "g": ["q"] * 50})

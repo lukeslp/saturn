@@ -13,6 +13,7 @@ Both adapters share a sample-based schema inference step so the caller can ask
 
 from __future__ import annotations
 
+import os
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -387,20 +388,26 @@ class FileAdapter(SourceAdapter):
     _POLARS_DIRECT = {".xlsx", ".xls", ".xlsb", ".ods", ".tsv", ".feather", ".arrow"}
 
     def _scan_sql(self) -> str:
+        def literal(value: object) -> str:
+            return "'" + str(value).replace("'", "''") + "'"
+
+        def identifier(value: object) -> str:
+            return '"' + str(value).replace('"', '""') + '"'
+
         ext = self.path.suffix.lower()
         if ext == ".parquet":
-            return f"SELECT * FROM read_parquet('{self.path}')"
+            return f"SELECT * FROM read_parquet({literal(self.path)})"
         if ext == ".csv":
-            return f"SELECT * FROM read_csv_auto('{self.path}')"
+            return f"SELECT * FROM read_csv_auto({literal(self.path)})"
         if ext in {".jsonl", ".ndjson"}:
             return (
-                f"SELECT * FROM read_json_auto('{self.path}', "
+                f"SELECT * FROM read_json_auto({literal(self.path)}, "
                 "format='newline_delimited', union_by_name=true)"
             )
         if ext == ".json":
             # union_by_name lets DuckDB read arrays whose objects carry
             # different key sets (heterogeneous records) instead of erroring.
-            return f"SELECT * FROM read_json_auto('{self.path}', union_by_name=true)"
+            return f"SELECT * FROM read_json_auto({literal(self.path)}, union_by_name=true)"
         if ext in {".db", ".sqlite", ".sqlite3"}:
             con = self._conn()
             con.execute("INSTALL sqlite; LOAD sqlite;")
@@ -408,7 +415,7 @@ class FileAdapter(SourceAdapter):
             # _scan_sql(), and DuckDB rejects re-attaching a name that's
             # already there. DETACH first to keep this side-effect-free.
             con.execute("DETACH DATABASE IF EXISTS s;")
-            con.execute(f"ATTACH '{self.path}' AS s (TYPE sqlite);")
+            con.execute(f"ATTACH {literal(self.path)} AS s (TYPE sqlite);")
             table = self.table
             if table is None:
                 # Newer DuckDB-SQLite extensions expose the catalog via
@@ -428,14 +435,14 @@ class FileAdapter(SourceAdapter):
                 ranked: list[tuple[int, str]] = []
                 for t in tables:
                     try:
-                        n = con.execute(f'SELECT COUNT(*) FROM s."{t}"').fetchone()[0]
+                        n = con.execute(f"SELECT COUNT(*) FROM s.{identifier(t)}").fetchone()[0]
                     except Exception:
                         n = 0
                     ranked.append((n, t))
                 ranked.sort(key=lambda kv: (-kv[0], kv[1]))
                 table = ranked[0][1]
             # Quote the identifier for tables with reserved-word or punctuated names
-            return f'SELECT * FROM s."{table}"'
+            return f"SELECT * FROM s.{identifier(table)}"
         raise ValueError(f"Unsupported file type: {ext}")
 
     def _load_with_polars(self) -> "pl.DataFrame":
@@ -599,6 +606,19 @@ class FileAdapter(SourceAdapter):
                 # last-ditch: DuckDB can read almost anything we haven't caught
                 tbl = self._conn().execute(self._scan_sql()).fetch_arrow_table()
                 df = _ensure_frame(pl.from_arrow(tbl))
+
+        limits = (
+            ("SATURN_MAX_ROWS", df.height, "row limit"),
+            ("SATURN_MAX_COLUMNS", df.width, "column limit"),
+            ("SATURN_MAX_CELLS", df.height * df.width, "cell limit"),
+        )
+        for variable, actual, label in limits:
+            raw = os.environ.get(variable)
+            if raw and actual > int(raw):
+                raise ValueError(
+                    f"parsed dataset exceeds configured {label}: "
+                    f"{actual:,} > {int(raw):,} ({variable})"
+                )
 
         self._df = df
         self._row_count = df.height

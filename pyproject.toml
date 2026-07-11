@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "saturn-dissect"
-version = "0.2.0"
+version = "0.3.0"
 description = "Dataset dissector: polars-native profiling, HTML + JSON reports, optional multi-provider LLM insight pass, live Flask viewer"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -44,10 +44,7 @@ nlp = [
     "fasttext-wheel>=0.9",
 ]
 llm = [
-    # Provider clients are pulled in via shared/llm_providers; optional here if running without ~/shared on PYTHONPATH
-    "anthropic>=0.30",
-    "openai>=1.30",
-    "groq>=0.9",
+    "litellm>=1.40",
     # Tolerant JSON5 parser — fallback when the strict parser fails on
     # Opus-style trailing commas / missing commas in long structured outputs.
     "pyjson5>=1.6",
@@ -55,6 +52,9 @@ llm = [
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "jsonschema>=4.23",
+    # The offline parsing tests exercise the tolerant [llm] fallback.
+    "pyjson5>=1.6",
 ]
 web = [
     "flask>=3.0",
@@ -62,13 +62,16 @@ web = [
     # Spreadsheet ingestion for uploaded .xlsx / .xls / .xlsb / .ods
     "fastexcel>=0.10",
     "xlsxwriter>=3.0",
+    "gunicorn>=22",
+    "markdown>=3.6",
+    "bleach>=6.1",
 ]
 all = [
     "saturn-dissect[nlp,llm,web,dev]",
 ]
 
 [project.scripts]
-saturn = "saturn.cli:app"
+saturn = "saturn.entrypoint:main"
 
 [project.urls]
 Homepage = "https://github.com/lukeslp/saturn"

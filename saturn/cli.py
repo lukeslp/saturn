@@ -44,7 +44,7 @@ try:
     from .llm.gateway import parse_provider_spec
     from .llm.keys import MissingKeyError, load_api_keys
     _LLM_AVAILABLE = True
-except ImportError:  # ~/shared/llm_providers not on PYTHONPATH
+except ImportError:  # [llm] extra not installed
     run_insights = None
     run_compare_insights = None
     parse_provider_spec = None
@@ -62,7 +62,7 @@ def _resolve_llm(llm_spec: list[str] | None):
         return None
     if not _LLM_AVAILABLE:
         console.print(
-            "[red]--llm requires ~/shared on PYTHONPATH[/] (see docs/DEPLOY.md)"
+            "[red]--llm requires the llm extra: pip install 'saturn-dissect[llm]'[/]"
         )
         return None
     try:
@@ -150,6 +150,17 @@ app = typer.Typer(
 console = Console()
 
 
+@app.command("helper")
+def helper_command(job: Path = typer.Argument(..., exists=True, dir_okay=False)) -> None:
+    """Run one isolated machine-readable profile or compare job."""
+    from .helper import HelperError, run_job
+
+    try:
+        run_job(job)
+    except HelperError:
+        raise typer.Exit(code=1)
+
+
 def _emit_outputs(
     data,
     *,
@@ -230,6 +241,7 @@ def _run(
         sampled_rows = df.height
         effective_count = df.height
         mode = "full"
+        correlation_frame = df
     else:
         with console.status("scanning schema", spinner="dots"):
             schema = adapter.schema()
@@ -249,6 +261,7 @@ def _run(
         row_count = effective_count
         sampled_rows = len(sample)
         mode = "sample"
+        correlation_frame = sample
 
     data = assemble(
         source=adapter.source,
@@ -258,6 +271,7 @@ def _run(
         schema=schema.columns,
         results=results,
         mode=mode,
+        correlation_frame=correlation_frame,
     )
 
     _print_summary(schema.columns, results, effective_count)

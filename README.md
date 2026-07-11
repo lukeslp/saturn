@@ -64,6 +64,33 @@ saturn analyze data.csv --llm anthropic:claude-sonnet-4-6 --llm openai:gpt-4o-mi
 saturn compare data.csv --by slice --llm anthropic
 ```
 
+### Local machine helper
+
+`saturn helper JOB.json` is the stable, newline-delimited interface for local
+desktop integrations. The job and every referenced path must share one
+directory; relative paths cannot escape it. A version 1 profile job is:
+
+```json
+{
+  "jobVersion": 1,
+  "operation": "profile",
+  "inputs": [{
+    "path": "input.arrow",
+    "format": "arrow",
+    "descriptor": {"source": "accepted-citations"}
+  }],
+  "outputPath": "result.json",
+  "options": {"seed": 42}
+}
+```
+
+Use two inputs and `"operation": "compare"` for pairwise analysis; each
+descriptor may add a `label`. JSON inputs are arrays of record objects. Arrow
+inputs are IPC files. The helper writes exactly one contract-v1 JSON artifact
+with atomic replacement. Standard output contains JSON progress events only,
+including a stable error or cancellation phase on failure. Interrupted and
+failed runs remove temporary files and never partially replace an artifact.
+
 ## Output
 
 1. **Terminal**: row count, per-column type, null %, unique count, alerts (`duplicates`, `high_skew`, `outliers`, `multilingual`, `near_unique`, `boilerplate`, `allcaps`, `one_word`, `url_heavy`, and so on).
@@ -73,12 +100,15 @@ saturn compare data.csv --by slice --llm anthropic
 ## Viewer
 
 ```bash
-pip install -e '.[web]'
+pip install -e '.[web,llm]'
+export ANTHROPIC_API_KEY='...'  # required for the default public model workflow
 saturn serve --dir path/to/findings/ --port 5043
 open http://127.0.0.1:5043
 ```
 
 A WCAG 2.2 AA compliant live alternative to the static HTML report. Drop findings JSON files into a directory; refreshing the index picks up new runs without restarting. `/api/findings/<id>` returns the raw JSON for scripting.
+
+Inject provider credentials through the service environment; never store them in the repository. Without `ANTHROPIC_API_KEY`, the default model stage fails open and Saturn still returns the deterministic analysis without a model narrative.
 
 ## Design
 
@@ -109,7 +139,7 @@ Pass `--llm provider[:model]` on `analyze`, `huggingface`, or `compare` to layer
 
 On compare mode the insight pass walks the top-K most divergent columns (ranked by the same composite score powering the "most divergent" section) and emits a pair-aware narrative referring to each side by its label.
 
-Requires `~/shared/llm_providers` on `PYTHONPATH` (the unified provider gateway). Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
+Install `pip install 'saturn-dissect[llm]'` and set the provider's standard API-key environment variable. Supported providers: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, ollama.
 
 ## Data handling
 
@@ -129,7 +159,7 @@ export SATURN_REDACT_EVIDENCE_VALUES=1
 
 With redaction on, counts, stats, and the language mix still go to the model; only the verbatim values and words are held back.
 
-The destination is whichever provider you name in `--llm`. Through `~/shared/llm_providers` that can be any of: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
+The destination is whichever provider you name in `--llm`: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
 
 Language detection is local in every mode. When the fastText `lid.176` model is present, saturn uses it and stamps a CC-BY-SA-3.0 attribution into the report footer and the JSON sidecar (`attributions` key), because language counts produced by `lid.176` are a derivative work. See [NOTICE](NOTICE).
 

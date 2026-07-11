@@ -10,7 +10,7 @@ from typing import Any
 
 from ..compare import ColumnComparison, CompareReport
 from ..profilers import ProfileResult
-from .evidence import project_stats, redact_values_from_env
+from .evidence import project_delta, project_stats, redact_values_from_env
 
 
 def _prune_lang(counts: dict[str, int] | None) -> dict[str, int]:
@@ -45,12 +45,16 @@ def compare_column_evidence(
     a_label: str,
     b_label: str,
 ) -> dict[str, Any]:
+    redact = redact_values_from_env()
     return {
         "column": cc.column,
         "kind": cc.kind,
+        "kind_a": cc.kind_a if cc.kind_a is not None else (cc.a.kind if cc.a else None),
+        "kind_b": cc.kind_b if cc.kind_b is not None else (cc.b.kind if cc.b else None),
+        "compatible": cc.compatible,
         "a": _side_payload(a_label, cc.a),
         "b": _side_payload(b_label, cc.b),
-        "delta": dict(cc.delta or {}),
+        "delta": project_delta(cc.delta or {}, redact_values=redact),
         "notes": list(cc.notes or []),
     }
 

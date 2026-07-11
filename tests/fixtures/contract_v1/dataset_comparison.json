@@ -1,0 +1,50 @@
+{
+  "alerts": [],
+  "columns": [
+    {
+      "compatible": false,
+      "delta": {},
+      "name": "value",
+      "notes": [
+        "schema drift"
+      ],
+      "profiles": {
+        "a": null,
+        "b": null
+      },
+      "sideKinds": {
+        "a": "numeric",
+        "b": "text"
+      }
+    }
+  ],
+  "contractVersion": 1,
+  "engine": {
+    "name": "saturn",
+    "version": "0.3.0"
+  },
+  "extensions": {},
+  "kind": "dataset_comparison",
+  "options": {},
+  "provenance": {
+    "generatedAt": "2026-01-01T00:00:00+00:00"
+  },
+  "sides": {
+    "a": {
+      "label": "A",
+      "rowCount": 1,
+      "schema": {
+        "value": "numeric"
+      },
+      "source": "a.csv"
+    },
+    "b": {
+      "label": "B",
+      "rowCount": 1,
+      "schema": {
+        "value": "text"
+      },
+      "source": "b.csv"
+    }
+  }
+}

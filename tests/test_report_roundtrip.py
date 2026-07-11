@@ -86,3 +86,17 @@ def test_roundtrip_when_no_insight_bundle():
     restored = ReportData.from_findings(data.to_findings())
     assert restored.insight_bundle is None
     assert restored.results[0].column == "x"
+
+
+def test_roundtrip_preserves_correlations():
+    data = _mk()
+    data.correlation_labels = ["x", "y"]
+    data.correlation_matrix = [[1.0, None], [None, 1.0]]
+    data.correlation_pair_counts = [[3, 1], [1, 4]]
+
+    restored = ReportData.from_findings(data.to_findings())
+
+    assert restored.correlation_labels == data.correlation_labels
+    assert restored.correlation_matrix == data.correlation_matrix
+    assert restored.correlation_pair_counts == data.correlation_pair_counts
+    assert restored.to_findings()["correlations"] == data.to_findings()["correlations"]

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,8 +49,9 @@ class ReportData:
     overview_chart_html: str | None = None
     language_chart_html: str | None = None
     correlation_chart_html: str | None = None
-    correlation_matrix: list[list[float]] | None = None
+    correlation_matrix: list[list[float | None]] | None = None
     correlation_labels: list[str] | None = None
+    correlation_pair_counts: list[list[int]] | None = None
     language_counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     insight_bundle: "InsightBundle | None" = None
@@ -111,7 +115,21 @@ class ReportData:
             out["attributions"] = attributions
         if self.insight_bundle is not None:
             out["insights"] = self.insight_bundle.to_dict()
+        if self.correlation_matrix is not None:
+            out["correlations"] = {
+                "labels": self.correlation_labels,
+                "matrix": self.correlation_matrix,
+                "pair_counts": self.correlation_pair_counts,
+            }
         return out
+
+    def to_contract_v1(self) -> dict[str, Any]:
+        """Return the stable cross-language contract without changing legacy JSON."""
+        from .core import migrate_legacy, validate_contract
+
+        payload = migrate_legacy(self.to_findings())
+        validate_contract(payload)
+        return payload
 
     @classmethod
     def from_findings(cls, payload: dict[str, Any]) -> "ReportData":
@@ -119,9 +137,8 @@ class ReportData:
 
         Enables the backfill flow: load findings from disk, run the LLM pass
         against the same aggregates the viewer already has, write insights back.
-        Charts and correlation matrix are not restored — they're expensive
-        render artifacts, not contract data. The insight pass only needs
-        `results` + `meta`.
+        Rendered charts are not restored, but correlation values are contract
+        data and survive load/write cycles.
         """
         from .profilers import Alert, ProfileResult
 
@@ -159,6 +176,11 @@ class ReportData:
             language_counts=payload.get("language_counts", {}) or {},
             notes=payload.get("notes", []) or [],
         )
+        correlations = payload.get("correlations")
+        if isinstance(correlations, dict):
+            data.correlation_labels = correlations.get("labels")
+            data.correlation_matrix = correlations.get("matrix")
+            data.correlation_pair_counts = correlations.get("pair_counts")
         if "insights" in payload:
             from .insights import Critique, Insight, InsightBundle
 
@@ -204,6 +226,7 @@ def assemble(
     schema: dict[str, str],
     results: list[ProfileResult],
     mode: str = "full",
+    correlation_frame: Any | None = None,
 ) -> ReportData:
     meta = DatasetMeta(
         source=source,
@@ -230,20 +253,63 @@ def assemble(
     data.language_counts = merged
     data.language_chart_html = language_chart(merged)
 
-    # correlation across numeric columns (sample-based)
-    numeric = [r for r in results if r.kind == "numeric" and r.extras.get("sample")]
-    if len(numeric) >= 2:
-        max_len = min(len(r.extras["sample"]) for r in numeric)
-        mat = np.vstack([np.asarray(r.extras["sample"][:max_len]) for r in numeric])
-        corr = np.corrcoef(mat)
-        labels = [r.column for r in numeric]
-        data.correlation_matrix = corr.tolist()
+    # Correlations must share row alignment. Sample the source frame once, then
+    # use pairwise-complete rows for each coefficient instead of independently
+    # compacted per-column profiler samples.
+    labels = [r.column for r in results if r.kind == "numeric"]
+    if correlation_frame is not None and len(labels) >= 2:
+        corr, pair_counts = _aligned_correlations(correlation_frame, labels, seed)
+        data.correlation_matrix = corr
         data.correlation_labels = labels
+        data.correlation_pair_counts = pair_counts
         data.correlation_chart_html = correlation_heatmap(
-            corr.tolist(), labels
+            corr, labels
         )
 
     return data
+
+
+_CORRELATION_SAMPLE_K = 5_000
+
+
+def _aligned_correlations(
+    frame: Any, labels: list[str], seed: int
+) -> tuple[list[list[float | None]], list[list[int]]]:
+    """Return finite pairwise correlations and observation counts from one sample."""
+    import polars as pl
+
+    if not isinstance(frame, pl.DataFrame):
+        frame = pl.DataFrame(frame)
+    present = [label for label in labels if label in frame.columns]
+    sampled = frame.select(present)
+    if sampled.height > _CORRELATION_SAMPLE_K:
+        sampled = sampled.sample(n=_CORRELATION_SAMPLE_K, seed=seed, shuffle=True)
+
+    arrays: list[np.ndarray] = []
+    for label in labels:
+        if label not in sampled.columns:
+            arrays.append(np.full(sampled.height, np.nan))
+            continue
+        values = sampled[label].cast(pl.Float64, strict=False).to_numpy()
+        arrays.append(np.asarray(values, dtype=float))
+
+    matrix: list[list[float | None]] = []
+    counts: list[list[int]] = []
+    for left in arrays:
+        matrix_row: list[float | None] = []
+        count_row: list[int] = []
+        for right in arrays:
+            valid = np.isfinite(left) & np.isfinite(right)
+            count = int(valid.sum())
+            count_row.append(count)
+            if count < 2 or left[valid].std() == 0 or right[valid].std() == 0:
+                matrix_row.append(None)
+                continue
+            value = float(np.corrcoef(left[valid], right[valid])[0, 1])
+            matrix_row.append(value if math.isfinite(value) else None)
+        matrix.append(matrix_row)
+        counts.append(count_row)
+    return matrix, counts
 
 
 def render_html(data: ReportData, output_path: Path) -> Path:
@@ -320,16 +386,43 @@ def render_compare_html(report, output_path: Path) -> Path:
 
 
 def write_findings(data: ReportData, output_path: Path) -> Path:
-    output_path.write_text(
-        json.dumps(data.to_findings(), indent=2, default=_json_default), encoding="utf-8"
+    _atomic_write_text(
+        output_path,
+        json.dumps(data.to_findings(), indent=2, default=_json_default, allow_nan=False),
     )
     return output_path
 
 
 def write_compare_findings(report, output_path: Path) -> Path:
     payload = {"saturn_version": __version__, **report.to_dict()}
-    output_path.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
+    _atomic_write_text(
+        output_path,
+        json.dumps(payload, indent=2, default=_json_default, allow_nan=False),
+    )
     return output_path
+
+
+def _atomic_write_text(output_path: Path, content: str) -> None:
+    """Durably replace a text artifact without exposing a partial file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{output_path.name}.", dir=output_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, output_path)
+        dir_fd = os.open(output_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _jinja() -> Environment:

@@ -1,0 +1,55 @@
+{
+  "alerts": [],
+  "columns": [
+    {
+      "alerts": [],
+      "count": 3,
+      "details": {},
+      "kind": "numeric",
+      "name": "score",
+      "nullCount": 0,
+      "nullRate": 0.0,
+      "stats": {
+        "mean": 2.0
+      },
+      "uniqueCount": 3
+    }
+  ],
+  "contractVersion": 1,
+  "correlations": {
+    "labels": [
+      "score"
+    ],
+    "pairCounts": [
+      [
+        3
+      ]
+    ],
+    "values": [
+      [
+        1.0
+      ]
+    ]
+  },
+  "descriptor": {
+    "rowCount": 3,
+    "schema": {
+      "score": "numeric"
+    },
+    "source": "fixture.csv"
+  },
+  "engine": {
+    "name": "saturn",
+    "version": "0.3.0"
+  },
+  "extensions": {},
+  "kind": "dataset_profile",
+  "options": {
+    "mode": "full",
+    "sampledRows": 3,
+    "seed": 42
+  },
+  "provenance": {
+    "generatedAt": "2026-01-01T00:00:00+00:00"
+  }
+}
