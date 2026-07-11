@@ -42,3 +42,4 @@ data/
 !tests/fixtures/
 .claude/
 .playwright-mcp/
+.worktrees/
