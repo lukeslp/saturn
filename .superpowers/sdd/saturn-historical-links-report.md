@@ -107,4 +107,36 @@ initial HTML policy with the offline-only policy.
 
 ## Follow-up deployment
 
-Pending final timestamped backup, service status, and live crawl result.
+The complete-pair and offline CSP fix was staged at:
+
+```text
+/home/coolhand/staging/saturn-historical-20260711T222150Z/full
+```
+
+The seven focused tests passed on drummer before deployment. The previous live
+application was backed up to:
+
+```text
+/home/coolhand/backups/saturn-historical-20260711T222150Z
+```
+
+After copying the four changed deployment paths, the deployment ran
+`sudo systemctl restart saturn-viewer.service`, polled the local health endpoint,
+and checked `systemctl is-active`. Final status was `active`; local and public
+health returned HTTP 200.
+
+The same public crawl was then repeated:
+
+```text
+archive_ids=233 root_internal_links=238 checked=704 broken=0
+html_csp=sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'
+notebook_disposition=attachment; filename=data-trove-shipwrecks.ipynb
+landing_truthful=True
+report_text_preserved=True
+```
+
+The report check confirms that preserved semantic HTML and inline styling still
+arrive. The policy intentionally blocks the legacy Plotly CDN and every other
+network channel, so historical charts that depended on that CDN degrade without
+network access while report text remains readable. Missing, encoded traversal,
+and unsupported-extension checks each returned 404.
