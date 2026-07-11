@@ -27,7 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         try:
             run_job(Path(args[1]))
-        except (HelperError, OSError):
+        except HelperError:
             return 1
         return 0
 

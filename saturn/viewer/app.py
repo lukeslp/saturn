@@ -304,7 +304,8 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
             abort(404)
-        return load_findings(path).raw
+        doc = load_findings(path)
+        return doc.artifact if doc.artifact is not None else doc.raw
 
     @app.get("/view/<id>.ipynb")
     def view_ipynb(id: str):

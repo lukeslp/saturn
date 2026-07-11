@@ -176,6 +176,56 @@ def test_viewer_loader_consumes_same_legacy_profile_artifact(tmp_path: Path):
     assert document.raw == json.loads(legacy_path.read_text())
 
 
+@pytest.mark.parametrize("operation", ["profile", "compare"])
+def test_helper_contract_artifacts_load_render_and_remain_raw_via_api(
+    tmp_path: Path, operation: str,
+):
+    from saturn.viewer.app import create_app
+    from saturn.viewer.loader import FindingsKind, load_findings
+
+    inputs = [_input(tmp_path / "left.json", [{"score": 1}, {"score": 2}])]
+    if operation == "compare":
+        inputs.append(_input(tmp_path / "right.json", [{"score": 2}, {"score": 4}]))
+        inputs[0]["descriptor"]["label"] = "left"
+        inputs[1]["descriptor"]["label"] = "right"
+    result = runner.invoke(app, ["helper", str(_job(tmp_path, operation, inputs))])
+    assert result.exit_code == 0, result.stdout
+
+    artifact_path = tmp_path / "result.json"
+    artifact = json.loads(artifact_path.read_text())
+    document = load_findings(artifact_path)
+    expected_kind = FindingsKind.PROFILE if operation == "profile" else FindingsKind.COMPARE
+    assert document.kind is expected_kind
+
+    client = create_app(findings_dir=tmp_path, testing=True).test_client()
+    assert client.get("/").status_code == 200
+    view = client.get("/view/result")
+    assert view.status_code == 200
+    assert "score" in view.get_data(as_text=True)
+    api = client.get("/api/findings/result")
+    assert api.status_code == 200
+    assert api.get_json() == artifact
+
+
+@pytest.mark.parametrize("job_arg,code", [
+    ("missing/job.json", "job_not_found"),
+    (".", "job_unreadable"),
+])
+def test_entrypoint_job_resolution_errors_are_single_structured_events(
+    tmp_path: Path, job_arg: str, code: str,
+):
+    result = subprocess.run(
+        [sys.executable, "-m", "saturn.entrypoint", "helper", job_arg],
+        text=True, capture_output=True, cwd=Path(__file__).parents[1], check=False,
+    )
+    assert result.returncode != 0
+    assert result.stderr == ""
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert len(events) == 1
+    assert events[0]["event"] == "error"
+    assert events[0]["phase"] == code
+
+
 def test_module_subprocess_emits_only_ndjson(tmp_path: Path):
     source = _input(tmp_path / "rows.json", [{"x": 1}])
     job = _job(tmp_path, "profile", [source])

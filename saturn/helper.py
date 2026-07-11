@@ -171,7 +171,7 @@ def compare_artifact(left, right, *, descriptors: list[InputDescriptor],
 
 def run_job(job_file: Path) -> Path:
     """Execute one v1 job and atomically replace its single output artifact."""
-    job_file = job_file.resolve(strict=True)
+    job_file = Path(job_file)
     root = job_file.parent
     temp_path: Path | None = None
     previous_handlers: dict[int, Any] = {}
@@ -180,6 +180,15 @@ def run_job(job_file: Path) -> Path:
         raise HelperCancelled()
 
     try:
+        try:
+            job_file = job_file.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise HelperError("job_not_found", "job file does not exist") from exc
+        except OSError as exc:
+            raise HelperError("job_unreadable", f"could not resolve job file: {exc}") from exc
+        if not job_file.is_file():
+            raise HelperError("job_unreadable", "job path is not a readable file")
+        root = job_file.parent
         for signum in (signal.SIGTERM, signal.SIGINT):
             previous_handlers[signum] = signal.signal(signum, cancel)
         _event("progress", "validate", 0.05, "validating job")
