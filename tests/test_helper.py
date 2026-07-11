@@ -23,14 +23,14 @@ def _input(path: Path, rows: list[dict], format: str = "json") -> dict:
     return {"path": path.name, "format": format, "descriptor": {"source": path.name}}
 
 
-def _job(tmp_path: Path, operation: str, inputs: list[dict]) -> Path:
+def _job(tmp_path: Path, operation: str, inputs: list[dict], *, options=None) -> Path:
     path = tmp_path / "job.json"
     path.write_text(json.dumps({
         "jobVersion": 1,
         "operation": operation,
         "inputs": inputs,
         "outputPath": "result.json",
-        "options": {"seed": 17},
+        "options": {"seed": 17} if options is None else options,
     }), encoding="utf-8")
     return path
 
@@ -84,6 +84,21 @@ def test_helper_rejects_bad_envelopes_and_traversal(tmp_path: Path, mutation, co
     assert not (tmp_path.parent / "escaped.json").exists()
 
 
+@pytest.mark.parametrize("options", [
+    {"seed": "17"}, {"seed": True}, {"seed": -1}, {"seed": 17, "future": True},
+])
+def test_helper_rejects_unsupported_or_ill_typed_options_without_output(
+    tmp_path: Path, options: dict,
+):
+    source = _input(tmp_path / "rows.json", [{"x": 1}])
+    result = runner.invoke(app, ["helper", str(_job(tmp_path, "profile", [source], options=options))])
+    assert result.exit_code != 0
+    event = json.loads(result.stdout.splitlines()[-1])
+    assert event["event"] == "error"
+    assert event["phase"] == "invalid_options"
+    assert not (tmp_path / "result.json").exists()
+
+
 def test_helper_failure_preserves_existing_output_and_removes_temps(tmp_path: Path):
     (tmp_path / "bad.json").write_text("not json")
     (tmp_path / "result.json").write_text("original")
@@ -94,18 +109,71 @@ def test_helper_failure_preserves_existing_output_and_removes_temps(tmp_path: Pa
     assert not list(tmp_path.glob(".*.tmp"))
 
 
-def test_direct_adapter_and_helper_are_semantically_equivalent(tmp_path: Path):
-    from saturn.helper import profile_artifact
+def _without_runtime_identifiers(artifact: dict) -> dict:
+    artifact = json.loads(json.dumps(artifact))
+    artifact["provenance"].pop("generatedAt", None)
+    if artifact["kind"] == "dataset_profile":
+        artifact["descriptor"]["source"] = "<source>"
+    else:
+        for side in artifact["sides"].values():
+            side["source"] = "<source>"
+    return artifact
+
+
+def test_profile_helper_matches_independently_migrated_cli_findings(tmp_path: Path):
+    from saturn.core import migrate_legacy
 
     rows = [{"score": 1, "group": "a"}, {"score": 2, "group": "b"}]
-    source = _input(tmp_path / "rows.json", rows)
-    result = runner.invoke(app, ["helper", str(_job(tmp_path, "profile", [source]))])
+    source_path = tmp_path / "rows.json"
+    source = _input(source_path, rows)
+    legacy_path = tmp_path / "legacy-profile.json"
+    cli_result = runner.invoke(app, ["analyze", str(source_path), "--seed", "17",
+                                     "--findings", str(legacy_path),
+                                     "--out", str(tmp_path / "profile.html")])
+    assert cli_result.exit_code == 0, cli_result.stdout
+    expected = migrate_legacy(json.loads(legacy_path.read_text()))
+
+    helper_result = runner.invoke(app, ["helper", str(_job(tmp_path, "profile", [source]))])
+    assert helper_result.exit_code == 0, helper_result.stdout
+    actual = json.loads((tmp_path / "result.json").read_text())
+    assert _without_runtime_identifiers(actual) == _without_runtime_identifiers(expected)
+
+
+def test_compare_helper_matches_independently_migrated_cli_findings(tmp_path: Path):
+    from saturn.core import migrate_legacy
+
+    left_path, right_path = tmp_path / "left.json", tmp_path / "right.json"
+    inputs = [_input(left_path, [{"score": 1}, {"score": 3}]),
+              _input(right_path, [{"score": 2}, {"score": 8}])]
+    inputs[0]["descriptor"]["label"] = "left"
+    inputs[1]["descriptor"]["label"] = "right"
+    legacy_path = tmp_path / "legacy-compare.json"
+    cli_result = runner.invoke(app, ["compare", str(left_path), str(right_path),
+                                     "--label-a", "left", "--label-b", "right",
+                                     "--seed", "17", "--findings", str(legacy_path),
+                                     "--out", str(tmp_path / "compare.html")])
+    assert cli_result.exit_code == 0, cli_result.stdout
+    expected = migrate_legacy({"saturn_version": __import__("saturn").__version__,
+                               **json.loads(legacy_path.read_text())})
+
+    helper_result = runner.invoke(app, ["helper", str(_job(tmp_path, "compare", inputs))])
+    assert helper_result.exit_code == 0, helper_result.stdout
+    actual = json.loads((tmp_path / "result.json").read_text())
+    assert _without_runtime_identifiers(actual) == _without_runtime_identifiers(expected)
+
+
+def test_viewer_loader_consumes_same_legacy_profile_artifact(tmp_path: Path):
+    from saturn.viewer.loader import FindingsKind, load_findings
+
+    source_path = tmp_path / "rows.json"
+    _input(source_path, [{"score": 1}, {"score": 2}])
+    legacy_path = tmp_path / "legacy.json"
+    result = runner.invoke(app, ["analyze", str(source_path), "--findings", str(legacy_path),
+                                 "--out", str(tmp_path / "profile.html")])
     assert result.exit_code == 0, result.stdout
-    via_helper = json.loads((tmp_path / "result.json").read_text())
-    direct = profile_artifact(pl.DataFrame(rows), descriptor={"source": "rows.json"}, options={"seed": 17})
-    via_helper["provenance"].pop("generatedAt", None)
-    direct["provenance"].pop("generatedAt", None)
-    assert via_helper == direct
+    document = load_findings(legacy_path)
+    assert document.kind is FindingsKind.PROFILE
+    assert document.raw == json.loads(legacy_path.read_text())
 
 
 def test_module_subprocess_emits_only_ndjson(tmp_path: Path):
@@ -156,3 +224,32 @@ import saturn.helper
     result = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True,
                             cwd=Path(__file__).parents[1], check=False)
     assert result.returncode == 0, result.stderr
+
+
+def test_console_entrypoint_dispatches_helper_before_importing_cli_stack(tmp_path: Path):
+    source = _input(tmp_path / "rows.json", [{"x": 1}])
+    job = _job(tmp_path, "profile", [source])
+    code = """
+import builtins, sys
+original = builtins.__import__
+def guarded(name, *args, **kwargs):
+    if name.startswith(('typer', 'rich', 'flask', 'jinja2', 'plotly',
+                        'saturn.cli', 'saturn.viewer', 'saturn.llm')):
+        raise RuntimeError('forbidden eager import: ' + name)
+    return original(name, *args, **kwargs)
+builtins.__import__ = guarded
+from saturn.entrypoint import main
+raise SystemExit(main(['helper', sys.argv[1]]))
+"""
+    result = subprocess.run([sys.executable, "-c", code, str(job)], text=True,
+                            capture_output=True, cwd=Path(__file__).parents[1], check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.splitlines()[-1])["event"] == "complete"
+
+
+def test_module_entrypoint_preserves_non_helper_commands():
+    result = subprocess.run([sys.executable, "-m", "saturn.entrypoint", "version"],
+                            text=True, capture_output=True, cwd=Path(__file__).parents[1],
+                            check=False)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("saturn ")

@@ -71,7 +71,7 @@ all = [
 ]
 
 [project.scripts]
-saturn = "saturn.cli:app"
+saturn = "saturn.entrypoint:main"
 
 [project.urls]
 Homepage = "https://github.com/lukeslp/saturn"

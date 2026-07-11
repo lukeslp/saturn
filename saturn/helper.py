@@ -81,6 +81,12 @@ def _validate(raw: Any, root: Path) -> tuple[JobEnvelope, list[Path], Path]:
         raise HelperError("invalid_envelope", f"{operation} requires {expected} input(s)")
     if not isinstance(raw["options"], dict):
         raise HelperError("invalid_envelope", "options must be an object")
+    options = raw["options"]
+    if not set(options) <= {"seed"}:
+        raise HelperError("invalid_options", "only options.seed is supported in jobVersion 1")
+    seed = options.get("seed", 42)
+    if type(seed) is not int or seed < 0:
+        raise HelperError("invalid_options", "options.seed must be a non-negative integer")
     paths: list[Path] = []
     for item in inputs:
         if not isinstance(item, dict) or set(item) != {"path", "format", "descriptor"}:
@@ -134,6 +140,8 @@ def profile_artifact(frame, *, descriptor: InputDescriptor,
                  "sampled_rows": frame.height, "seed": seed, "mode": "full",
                  "generated_at": None},
         "schema": schema,
+        "language_counts": {},
+        "notes": [],
         "columns": [result.to_dict() for result in results],
     }
     artifact = _json_normalize(migrate_legacy(legacy))
@@ -157,7 +165,6 @@ def compare_artifact(left, right, *, descriptors: list[InputDescriptor],
     artifact = _json_normalize(migrate_legacy({"saturn_version": __version__,
                                                **report.to_dict()}))
     artifact["provenance"]["generatedAt"] = None
-    artifact["options"] = {"seed": seed}
     validate_contract(artifact)
     return artifact
 
