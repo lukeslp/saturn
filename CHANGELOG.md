@@ -4,6 +4,10 @@ All notable changes to saturn are recorded here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed
+- Unified the public viewer's default model as `openai:gpt-5.6-luna` across the app, forms, launcher, tests, and deployment guidance.
+- Raised the LiteLLM minimum to 1.84.0 and added deployment provenance recording so operators can verify every deployed source file against one reviewed Git commit.
+
 ## [0.3.0] - 2026-07-10
 
 ### Added
@@ -31,7 +35,7 @@ All notable changes to saturn are recorded here. The format follows [Keep a Chan
 - **A11y data-table fallback.** Every Plotly figure has a `<details>Show data table</details>` companion with a screen-reader-friendly `<table>`. Covers numeric histograms, categorical top-values (with shares), text length histograms, top-words, language counts (engine keys stripped), correlation matrices (capped at 12×12), and per-column null rates.
 - **LLM-curated columns (prompt v2).** Per-column `role` (`identifier` / `feature` / `free_text` / `quasi_identifier` / `noise`) and `treatment` (one-line guidance: "drop", "encode", "tokenize as text", etc.). Dataset-level `featured_charts` lets the model pick 3–5 columns with custom captions for a featured rail above per-column sections. Prompt schema bumped from `saturn-insight-v1` to `saturn-insight-v2`.
 - **BYOK on public viewer.** Per-request API key field on `/analyze` and `/analyze-hf`. Anonymous uploads default to stats-only when no key is provided. Server keys are scrubbed from the subprocess env when no BYOK is supplied. The provider dropdown now lists anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, and ollama. Picking ollama with no key threads a `"local"` sentinel through the resolver, runner, and key loader so saturn talks to `http://localhost:11434` keyless. Setting `OLLAMA_API_KEY=local` is explicitly avoided since unauthenticated localhost ollama rejects a literal `Bearer local` header.
-- **Demo mode.** Server defaults to `anthropic:claude-opus-4-7` and forms ship with the LLM pass enabled. BYOK is now an optional override rather than the only path.
+- **Demo mode.** Server defaults to the configured public model and forms ship with the language-model pass enabled. BYOK is now an optional override rather than the only path.
 - **`/batch` progress page** for live monitoring of bulk runs.
 - **Spreadsheet, TSV, Feather/Arrow ingestion** via the polars direct path.
 - 89 new tests since 0.2.0. Total now 290 passing.

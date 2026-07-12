@@ -43,12 +43,12 @@ def test_resolve_byok_with_explicit_provider(app):
     assert key == "sk-mine"
 
 
-def test_resolve_byok_assumes_anthropic_when_no_provider(app):
+def test_resolve_byok_assumes_configured_luna_when_no_provider(app):
     from saturn.viewer.app import _resolve_llm_request
 
     form = {"api_key": "sk-mine"}
     provider, key = _resolve_llm_request(app, form)
-    assert provider == "anthropic"
+    assert provider == "openai:gpt-5.6-luna"
     assert key == "sk-mine"
 
 
@@ -68,6 +68,12 @@ def test_resolve_falls_back_to_default_when_form_empty(app):
     provider, key = _resolve_llm_request(app, {})
     assert provider == "anthropic"
     assert key is None  # runner will look up server keys
+
+
+def test_default_model_spec_is_selected_and_submitted(client):
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'value="openai:gpt-5.6-luna" selected' in body
 
 
 def test_resolve_backfill_disallows_no_llm_pass(app):

@@ -59,13 +59,14 @@
    (e.g., api.assisted.space). On the public viewer, ollama only works
    if the *server* exposes one; local-to-the-user ollama is reachable
    only when saturn itself runs on the user's box. #}
-{% macro byok_fields(prefix, default_provider="anthropic", compact=False) %}
+{% macro byok_fields(prefix, default_provider="openai:gpt-5.6-luna", compact=False) %}
+  {% set default_provider_name = default_provider.split(':', 1)[0] %}
   <details class="field byok"{% if not compact %} open{% endif %}>
     <summary>API key (used once, not stored)</summary>
     <label for="{{ prefix }}-llm">Provider</label>
     <select id="{{ prefix }}-llm" name="llm">
       {% for p in ["anthropic", "openai", "groq", "gemini", "mistral", "cohere", "xai", "perplexity", "huggingface", "ollama"] %}
-        <option value="{{ p }}"{% if p == default_provider %} selected{% endif %}>{{ p }}{% if p == "ollama" %} (local){% endif %}</option>
+        <option value="{{ default_provider if p == default_provider_name else p }}"{% if p == default_provider_name %} selected{% endif %}>{{ p }}{% if p == "ollama" %} (local){% endif %}</option>
       {% endfor %}
     </select>
     <label for="{{ prefix }}-key">API key</label>

@@ -23,12 +23,12 @@ source venv/bin/activate
 export SATURN_TRUST_FORWARDED_PREFIX=1
 export SATURN_LEGACY_ARCHIVE_DIR="$LEGACY_ARCHIVE_DIR"
 
-# Demo posture: public requests attempt the LLM pass against Opus. The service
-# manager must inject ANTHROPIC_API_KEY into this process environment; secrets
+# Demo posture: public requests attempt the language-model pass against Luna.
+# The service must inject OPENAI_API_KEY into this process environment; secrets
 # never belong in this script or the repository. If the key is absent, Saturn
 # fails open and still returns the deterministic analysis without model insight.
 # Override SATURN_DEFAULT_LLM only together with that provider's standard key.
-export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-anthropic:claude-opus-4-7}"
+export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-openai:gpt-5.6-luna}"
 # Demo posture: anonymous uploads silently use the server's keys. Without
 # this flag, public submissions are forced into BYOK mode (or fail). For a
 # self-hosted private instance, leave this unset so visitors can't drain

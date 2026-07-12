@@ -50,7 +50,7 @@ def test_analyze_upload_redirects_to_job_page(client, monkeypatch):
     findings_dir, upload_path, finding_id, provider, api_key = captured["args"]
     assert upload_path.name == "tiny.csv"
     assert finding_id == "tiny"
-    assert provider == "anthropic"  # default
+    assert provider == "openai:gpt-5.6-luna"  # default
     assert api_key is None  # no BYOK in this test
 
 
@@ -173,7 +173,7 @@ def test_backfill_happy_path(client, tmp_path, monkeypatch):
     assert captured["kind"] == "backfill"
     _dir, finding_id, provider, api_key = captured["args"]
     assert finding_id == "demo"
-    assert provider == "anthropic"
+    assert provider == "openai:gpt-5.6-luna"
     assert api_key is None
 
 

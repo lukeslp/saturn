@@ -236,7 +236,7 @@
           <label for="sg-id">Repo id</label>
           <input type="text" id="sg-id" placeholder="user/dataset" value="">
         </div>
-        {{ byok_fields("sg", default_provider="anthropic") }}
+        {{ byok_fields("sg", default_provider="openai:gpt-5.6-luna") }}
         <label class="checkbox" style="margin-top: 0.75rem;">
           <input type="checkbox"> <span>stats only, skip summary</span>
         </label>
@@ -339,7 +339,7 @@
       <div class="summary-card">
         <div class="summary-meta">
           <span>dataset summary · high confidence</span>
-          <span class="cite">anthropic:claude-opus-4-7</span>
+          <span class="cite">openai:gpt-5.6-luna</span>
         </div>
         <p>This is the VizWiz validation set. The question column is where character lives: only 2,798 unique values with a 35% duplicate rate, dominated by generic prompts like "What is this?" (523 occurrences). Worth a closer look first: the answer_type column is 62% "other", and answers stores serialized Python dicts.</p>
         <p class="cite">citing: question.duplicate_rate · answer_type.top_rate · answers.top_words</p>
@@ -350,7 +350,7 @@
 <pre>&lt;div class="summary-card"&gt;
   &lt;div class="summary-meta"&gt;
     &lt;span&gt;dataset summary · high confidence&lt;/span&gt;
-    &lt;span class="cite"&gt;anthropic:claude-opus-4-7&lt;/span&gt;
+    &lt;span class="cite"&gt;openai:gpt-5.6-luna&lt;/span&gt;
   &lt;/div&gt;
   &lt;p&gt;…narrative…&lt;/p&gt;
   &lt;p class="cite"&gt;citing: x · y · z&lt;/p&gt;
@@ -433,7 +433,7 @@
           <dt>mode</dt><dd>full</dd>
           <dt>seed</dt><dd>42</dd>
           <dt>generated</dt><dd>2026-05-01T11:20:46+00:00</dd>
-          <dt>insight models</dt><dd>anthropic:claude-opus-4-7</dd>
+          <dt>insight models</dt><dd>openai:gpt-5.6-luna</dd>
           <dt>prompt version</dt><dd>saturn-insight-v2</dd>
           <dt>tokens</dt><dd>9,811</dd>
           <dt>raw JSON</dt><dd><a href="#">findings.json</a></dd>

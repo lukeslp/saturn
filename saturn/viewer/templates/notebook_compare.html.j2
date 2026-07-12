@@ -65,7 +65,7 @@ subprocess.run([
     "--label-a", "{{ doc.a_label }}",
     "--label-b", "{{ doc.b_label }}",
     "--findings", "{{ doc.id }}.json",
-    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'openai:gpt-5.6-luna') }}",
 ])</code></pre>
   </article>
 

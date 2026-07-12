@@ -101,14 +101,14 @@ failed runs remove temporary files and never partially replace an artifact.
 
 ```bash
 pip install -e '.[web,llm]'
-export ANTHROPIC_API_KEY='...'  # required for the default public model workflow
+export OPENAI_API_KEY='...'  # required for the default Luna workflow
 saturn serve --dir path/to/findings/ --port 5043
 open http://127.0.0.1:5043
 ```
 
 A WCAG 2.2 AA compliant live alternative to the static HTML report. Drop findings JSON files into a directory; refreshing the index picks up new runs without restarting. `/api/findings/<id>` returns the raw JSON for scripting.
 
-Inject provider credentials through the service environment; never store them in the repository. Without `ANTHROPIC_API_KEY`, the default model stage fails open and Saturn still returns the deterministic analysis without a model narrative.
+Inject provider credentials through the service environment; never store them in the repository. Without `OPENAI_API_KEY`, the default `openai:gpt-5.6-luna` stage fails open and Saturn still returns the deterministic analysis without a model narrative.
 
 ## Design
 

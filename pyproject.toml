@@ -44,7 +44,7 @@ nlp = [
     "fasttext-wheel>=0.9",
 ]
 llm = [
-    "litellm>=1.40",
+    "litellm>=1.84.0",
     # Tolerant JSON5 parser — fallback when the strict parser fails on
     # Opus-style trailing commas / missing commas in long structured outputs.
     "pyjson5>=1.6",

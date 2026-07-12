@@ -80,6 +80,17 @@ def test_health_endpoint(client, findings_dir):
     assert body["findings_dir"] == str(findings_dir)
 
 
+def test_health_endpoint_reports_deployment_commit(tmp_path, monkeypatch):
+    manifest = tmp_path / ".saturn-deployment.json"
+    manifest.write_text('{"schema": 1, "commit": "49d8196abc"}\n')
+    monkeypatch.setenv("SATURN_DEPLOY_MANIFEST", str(manifest))
+
+    app = create_app(findings_dir=tmp_path / "findings", testing=True)
+    body = app.test_client().get("/health").get_json()
+
+    assert body["deployment_commit"] == "49d8196abc"
+
+
 def test_index_when_directory_empty(tmp_path):
     app = create_app(findings_dir=tmp_path, testing=True)
     resp = app.test_client().get("/")

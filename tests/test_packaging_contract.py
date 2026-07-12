@@ -21,3 +21,8 @@ def test_gateway_has_no_private_shared_dependency():
     gateway = (ROOT / "saturn/llm/gateway.py").read_text()
     assert "llm_providers" not in gateway
     assert "~/shared" not in gateway
+
+
+def test_llm_extra_requires_patched_litellm_floor():
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert '"litellm>=1.84.0"' in pyproject

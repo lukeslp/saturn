@@ -39,6 +39,8 @@ from .runner import (
     start_job,
 )
 
+DEFAULT_LLM = "openai:gpt-5.6-luna"
+
 DEFAULT_PORT = 5043
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _ALLOWED_EXT = {
@@ -133,8 +135,8 @@ def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str |
     provider = (form.get("llm") or app.config["SATURN_DEFAULT_LLM"] or "").strip() or None
     api_key = (form.get("api_key") or "").strip() or None
     if api_key and not provider:
-        # User pasted a key but no provider — assume the most-common case.
-        provider = "anthropic"
+        # User pasted a key but no provider and the configured default is blank.
+        provider = DEFAULT_LLM
     # Ollama can run with no real key; gateway just needs *something* truthy
     # to avoid MissingKeyError. The provider class itself will pick the host.
     if provider and provider.split(":", 1)[0] == "ollama" and not api_key:
@@ -163,7 +165,7 @@ def create_app(
         os.environ.get("SATURN_UPLOAD_DIR", str(Path(tempfile.gettempdir()) / "saturn-uploads"))
     )
     app.config["SATURN_UPLOAD_DIR"].mkdir(parents=True, exist_ok=True)
-    app.config["SATURN_DEFAULT_LLM"] = os.environ.get("SATURN_DEFAULT_LLM", "anthropic")
+    app.config["SATURN_DEFAULT_LLM"] = os.environ.get("SATURN_DEFAULT_LLM", DEFAULT_LLM)
     app.config["TESTING"] = testing
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     app.config["SECRET_KEY"] = os.environ.get("SATURN_SECRET_KEY") or os.urandom(24).hex()
@@ -447,11 +449,14 @@ def create_app(
 
     @app.get("/health")
     def health():
+        from ..deployment import deployment_commit
+
         return {
             "status": "ok",
             "findings_dir": str(app.config["SATURN_FINDINGS_DIR"]),
             "upload_dir": str(app.config["SATURN_UPLOAD_DIR"]),
             "default_llm": app.config["SATURN_DEFAULT_LLM"],
+            "deployment_commit": deployment_commit(),
         }
 
     # ---------- mutation routes ---------------------------------------------

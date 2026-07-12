@@ -1,41 +1,26 @@
 # Deploying the saturn viewer on dr.eamer.dev
 
-The public viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). Server deployment is wired through `sm` and Caddy. A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
+The public viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
 
 ## Local dev
 
 ```bash
 pip install -e '.[web,llm]'
-export ANTHROPIC_API_KEY='...'
+export OPENAI_API_KEY='...'
 saturn serve --dir ./findings --port 5043
 open http://127.0.0.1:5043
 ```
 
 ## Server deployment (dr.eamer.dev)
 
-### 1. `sm` registration (already live)
+### 1. Service registration
 
-`~/service_manager.py` has a `saturn-viewer` entry at port 5043:
+Run the viewer as the unprivileged `coolhand` user on loopback port 5043. The service definition should use:
 
-```python
-'saturn-viewer': {
-    'name': 'Saturn Viewer',
-    'script': '/home/coolhand/projects/saturn/saturn/scripts/start.sh',
-    'working_dir': '/home/coolhand/projects/saturn/saturn',
-    'port': 5043,
-    'health_endpoint': 'http://localhost:5043/health',
-    'start_timeout': 15,
-    'description': 'Live saturn findings workbench (WCAG 2.2 AA, reads and creates findings in /home/coolhand/saturn-findings)'
-}
-```
-
-Manage with the usual verbs:
-
-```bash
-sm status                 # confirm Running
-sm restart saturn-viewer
-sm logs saturn-viewer
-sm stop saturn-viewer
+```text
+working directory: /home/coolhand/projects/saturn/saturn
+command: /home/coolhand/projects/saturn/saturn/scripts/start.sh
+health check: http://localhost:5043/health
 ```
 
 ### 2. `scripts/start.sh` (already committed)
@@ -46,7 +31,7 @@ Install the deployed environment with the viewer and provider gateway:
 pip install -e '.[web,llm]'
 ```
 
-Configure the service manager to inject `ANTHROPIC_API_KEY` into the process environment for the default `anthropic:claude-opus-4-7` workflow. Store the secret in the deployment platform's secret/environment facility, outside this repository; do not put it in `scripts/start.sh`, a tracked dotenv file, or service-manager source. A different `SATURN_DEFAULT_LLM` requires that provider's standard environment key.
+Configure the service to inject `OPENAI_API_KEY` into the process environment for the default `openai:gpt-5.6-luna` workflow. Store the secret in the deployment platform's secret/environment facility, outside this repository; do not put it in `scripts/start.sh` or a tracked dotenv file. A different `SATURN_DEFAULT_LLM` requires that provider's standard environment key.
 
 If the key is missing or the provider call fails, Saturn records the model-stage error and continues with deterministic findings. This fail-open behavior keeps analysis available but means the public model narrative is absent until the service environment is corrected.
 
@@ -60,9 +45,24 @@ exec gunicorn \
     "saturn.viewer.app:create_app(findings_dir='${FINDINGS_DIR}')"
 ```
 
-Environment knobs: `ANTHROPIC_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`. Defaults: `anthropic:claude-opus-4-7`, `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`. `ANTHROPIC_API_KEY` has no default and must be explicitly injected for the default public model workflow. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
+Environment knobs: `OPENAI_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`, `SATURN_DEPLOY_MANIFEST`. Defaults: `openai:gpt-5.6-luna`, `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`, and `.saturn-deployment.json` in the working directory. `OPENAI_API_KEY` has no default and must be explicitly injected for the default public model workflow. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
 
-### 3. Findings directory
+### 3. Deploy one reviewed commit
+
+Deploy from an explicit commit, not from a mutable working tree. Extract that commit into a staging directory, record the tracked-file hashes, and verify the manifest before switching the service to it:
+
+```bash
+COMMIT="$(git rev-parse origin/main)"
+STAGE="/home/coolhand/projects/saturn/releases/$COMMIT"
+mkdir -p "$STAGE"
+git archive "$COMMIT" | tar -x -C "$STAGE"
+python -m saturn.deployment record "$COMMIT" "$STAGE" --repo "$PWD"
+python "$STAGE/saturn/deployment.py" verify "$STAGE"
+```
+
+The record command refuses a staging tree whose tracked files differ from the selected commit. The verifier detects missing or changed deployed files. The `/health` response exposes the recorded commit as `deployment_commit`; compare it with the release SHA after restart. Keep the previous release available for rollback.
+
+### 4. Findings directory
 
 `/home/coolhand/saturn-findings/` is the source for current readings. Drop any `*.json` file saturn produces (profile or compare) into it and the index picks it up on the next request. The matching `*.html` file can live alongside the JSON but the viewer doesn't need it.
 
@@ -85,7 +85,7 @@ saturn analyze <source> \
 
 Then refresh the viewer in the browser. No restart needed. The index sorts newest-first by mtime.
 
-### 4. Caddy route (needs `@geepers_caddy`)
+### 5. Caddy route
 
 Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Two directives: a redirect for bare `/saturn` and the path-stripped reverse proxy for everything under it:
 
@@ -99,9 +99,9 @@ handle_path /saturn/* {
 }
 ```
 
-The `redir` is load-bearing: `handle_path /saturn/*` does not match the bare `/saturn` URL, which otherwise falls through to whatever static file_server is behind it. The `header_up` is also load-bearing: without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (scripts/start.sh sets it on the sm-managed deployment), so a direct-to-gunicorn caller cannot spoof a prefix.
+The `redir` is load-bearing: `handle_path /saturn/*` does not match the bare `/saturn` URL, which otherwise falls through to whatever static file_server is behind it. The `header_up` is also load-bearing: without it, the viewer's HTML links drop the `/saturn/` prefix and follow-ups 404. The app honors the header only when `SATURN_TRUST_FORWARDED_PREFIX=1` is set (`scripts/start.sh` sets it for the managed service), so a direct-to-gunicorn caller cannot spoof a prefix.
 
-Apply via `@geepers_caddy` (sole authority; do not hand-edit). Then:
+Back up the active configuration, validate the candidate configuration, and reload only after validation succeeds. Then:
 
 ```bash
 sudo caddy validate --config /etc/caddy/Caddyfile
