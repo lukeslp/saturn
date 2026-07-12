@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -139,9 +137,21 @@ def test_activate_release_rejects_symlinked_environment_python(tmp_path):
         activate_release(tmp_path, commit)
 
 
+def _write_fake_runtime(path: Path) -> None:
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"${1:-}\" == '-c' ]]; then\n"
+        "  if [[ \"${2:-}\" == *base_prefix* ]]; then echo /fake-python-home; else echo 3.13; fi\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf '%s\\n' \"$@\"\n"
+    )
+    path.chmod(0o755)
+
+
 def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
     target = tmp_path / "runtime with spaces;and-metacharacters"
-    shutil.copy2(sys.executable, target)
+    _write_fake_runtime(target)
     python = tmp_path / "venv" / "bin" / "python"
     python.parent.mkdir(parents=True)
     python.symlink_to(target)
@@ -149,8 +159,7 @@ def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
 
     subprocess.run([script, python], check=True)
     result = subprocess.run(
-        [python, "-c", "import sys; print('\\n'.join(sys.argv[1:]))",
-         "argument with spaces", ";$(not-a-command)"],
+        [python, "argument with spaces", ";$(not-a-command)"],
         check=True, capture_output=True, text=True,
     )
 
@@ -160,7 +169,7 @@ def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
 
 def test_materialized_python_launcher_rejects_target_drift(tmp_path):
     target = tmp_path / "runtime"
-    shutil.copy2(sys.executable, target)
+    _write_fake_runtime(target)
     python = tmp_path / "venv" / "bin" / "python"
     python.parent.mkdir(parents=True)
     python.symlink_to(target)
