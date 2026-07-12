@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -157,7 +158,8 @@ def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
     python.symlink_to(target)
     script = Path(__file__).parents[1] / "scripts" / "materialize-venv-python.sh"
 
-    subprocess.run([script, python], check=True)
+    contaminated = {**os.environ, "PYTHONHOME": "/poisoned", "PYTHONPATH": "/poisoned"}
+    subprocess.run([script, python], check=True, env=contaminated)
     result = subprocess.run(
         [python, "argument with spaces", ";$(not-a-command)"],
         check=True, capture_output=True, text=True,

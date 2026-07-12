@@ -5,9 +5,9 @@ set -euo pipefail
 
 VENV_PYTHON="${1:?usage: materialize-venv-python.sh VENV_PYTHON}"
 if [[ -L "$VENV_PYTHON" ]]; then
-    PYTHON_HOME="$("$VENV_PYTHON" -c 'import sys; print(sys.base_prefix)')"
-    PYTHON_VERSION="$("$VENV_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-    REAL_PYTHON="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$VENV_PYTHON")"
+    PYTHON_HOME="$(env -u PYTHONHOME -u PYTHONPATH "$VENV_PYTHON" -c 'import sys; print(sys.base_prefix)')"
+    PYTHON_VERSION="$(env -u PYTHONHOME -u PYTHONPATH "$VENV_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    REAL_PYTHON="$(env -u PYTHONHOME -u PYTHONPATH python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$VENV_PYTHON")"
     HASH_COMMAND="$(command -v sha256sum)"
     EXPECTED_HASH="$("$HASH_COMMAND" "$REAL_PYTHON")"
     EXPECTED_HASH="${EXPECTED_HASH%% *}"
