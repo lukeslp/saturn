@@ -25,7 +25,7 @@ health check: http://localhost:5043/health
 
 ### 2. `scripts/start.sh` (already committed)
 
-The launcher resolves the physical commit-addressed source directory behind `current`, verifies its provenance manifest, and activates the matching environment under `venvs/<commit>/`. Source and environment directories are never modified after activation. `PYTHONDONTWRITEBYTECODE=1` prevents runtime cache files from appearing in the verified source tree.
+The launcher resolves the physical commit-addressed source directory behind `current`, verifies its provenance manifest, and runs Gunicorn with the matching environment's Python executable under `venvs/<commit>/`. Source and environment directories are never modified after activation. `PYTHONDONTWRITEBYTECODE=1` prevents runtime cache files from appearing in the verified source tree.
 
 Configure the service to inject `OPENAI_API_KEY` into the process environment for the default `openai:gpt-5.6-luna` workflow. Store the secret in the deployment platform's secret/environment facility, outside this repository; do not put it in `scripts/start.sh` or a tracked dotenv file. A different `SATURN_DEFAULT_LLM` requires that provider's standard environment key.
 
@@ -34,7 +34,7 @@ If the key is missing or the provider call fails, Saturn records the model-stage
 `scripts/start.sh` activates the saturn venv and runs gunicorn against the Flask app factory:
 
 ```bash
-exec gunicorn \
+exec "$VENV_DIR/bin/python" -m gunicorn \
     --bind "${HOST}:${PORT}" \
     --workers "$WORKERS" --threads "$THREADS" \
     --access-logfile - --error-logfile - \

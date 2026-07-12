@@ -25,7 +25,6 @@ VENV_DIR="$DEPLOY_ROOT/venvs/$DEPLOY_COMMIT"
 python3 "$APP_DIR/saturn/deployment.py" verify "$APP_DIR"
 test -x "$VENV_DIR/bin/python"
 cd "$APP_DIR"
-source "$VENV_DIR/bin/activate"
 export PYTHONDONTWRITEBYTECODE=1
 # Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
 export SATURN_TRUST_FORWARDED_PREFIX=1
@@ -45,7 +44,7 @@ export SATURN_PUBLIC_KEYS="${SATURN_PUBLIC_KEYS:-1}"
 
 mkdir -p "$FINDINGS_DIR"
 
-exec gunicorn \
+exec "$VENV_DIR/bin/python" -m gunicorn \
     --bind "${HOST}:${PORT}" \
     --workers "$WORKERS" --threads "$THREADS" \
     --access-logfile - --error-logfile - \

@@ -32,7 +32,7 @@ def test_release_launcher_uses_external_commit_venv_and_exact_manifest():
     launcher = (ROOT / "scripts/start.sh").read_text()
     assert 'SATURN_DEPLOY_MANIFEST="$APP_DIR/.saturn-deployment.json"' in launcher
     assert 'VENV_DIR="$DEPLOY_ROOT/venvs/$DEPLOY_COMMIT"' in launcher
-    assert 'source "$VENV_DIR/bin/activate"' in launcher
+    assert 'exec "$VENV_DIR/bin/python" -m gunicorn' in launcher
 
 
 def test_service_runs_launcher_through_atomic_current_link():
@@ -49,5 +49,7 @@ def test_release_script_uses_fresh_stages_and_atomic_activation():
     assert 'record "$COMMIT" "$STAGE"' in script
     assert 'verify "$STAGE"' in script
     assert 'python3 -m venv --copies "$VENV_STAGE"' in script
+    assert 'REAL_PYTHON="$(python3 -c' in script
+    assert '[[ ! -f "$VENV_PYTHON" || -L "$VENV_PYTHON" ]]' in script
     assert 'chmod -R a-w "$RELEASE" "$VENV"' in script
     assert 'activate "$COMMIT" "$DEPLOY_ROOT"' in script
