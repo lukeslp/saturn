@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from saturn.deployment import create_manifest, record_git_deployment, verify_manifest
+from saturn.deployment import (
+    activate_release,
+    create_manifest,
+    record_git_deployment,
+    verify_manifest,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -51,6 +56,70 @@ def test_manifest_rejects_paths_outside_deployment_root(tmp_path):
         create_manifest(tmp_path, commit="b" * 40, paths=["../outside.txt"])
 
 
+def test_verify_manifest_rejects_extra_sitecustomize(tmp_path):
+    source = tmp_path / "app.py"
+    source.write_text("reviewed\n")
+    payload = create_manifest(tmp_path, commit="a" * 40, paths=["app.py"])
+    manifest_path = tmp_path / ".saturn-deployment.json"
+    manifest_path.write_text(json.dumps(payload))
+    (tmp_path / "sitecustomize.py").write_text("import malware\n")
+
+    assert verify_manifest(tmp_path, manifest_path) == ["unexpected file: sitecustomize.py"]
+
+
+def test_verify_manifest_rejects_extra_symlink(tmp_path):
+    source = tmp_path / "app.py"
+    source.write_text("reviewed\n")
+    payload = create_manifest(tmp_path, commit="a" * 40, paths=["app.py"])
+    manifest_path = tmp_path / ".saturn-deployment.json"
+    manifest_path.write_text(json.dumps(payload))
+    (tmp_path / "alias.py").symlink_to(source)
+
+    assert verify_manifest(tmp_path, manifest_path) == ["unexpected symlink: alias.py"]
+
+
+def test_activate_release_atomically_switches_and_can_roll_back(tmp_path):
+    commit_a = "a" * 40
+    commit_b = "b" * 40
+    for commit in (commit_a, commit_b):
+        release = tmp_path / "releases" / commit
+        release.mkdir(parents=True)
+        (release / "app.py").write_text(f"{commit}\n")
+        payload = create_manifest(release, commit=commit, paths=["app.py"])
+        (release / ".saturn-deployment.json").write_text(json.dumps(payload))
+        python = tmp_path / "venvs" / commit / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.write_text("#!/bin/sh\n")
+
+    activate_release(tmp_path, commit_a)
+    assert (tmp_path / "current").resolve() == (tmp_path / "releases" / commit_a)
+    activate_release(tmp_path, commit_b)
+    assert (tmp_path / "current").resolve() == (tmp_path / "releases" / commit_b)
+    activate_release(tmp_path, commit_a)
+    assert (tmp_path / "current").resolve() == (tmp_path / "releases" / commit_a)
+
+
+def test_failed_release_verification_leaves_current_unchanged(tmp_path):
+    commit_a = "a" * 40
+    commit_b = "b" * 40
+    for commit in (commit_a, commit_b):
+        release = tmp_path / "releases" / commit
+        release.mkdir(parents=True)
+        (release / "app.py").write_text(f"{commit}\n")
+        payload = create_manifest(release, commit=commit, paths=["app.py"])
+        (release / ".saturn-deployment.json").write_text(json.dumps(payload))
+        python = tmp_path / "venvs" / commit / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.write_text("#!/bin/sh\n")
+    activate_release(tmp_path, commit_a)
+    (tmp_path / "releases" / commit_b / "sitecustomize.py").write_text("import malware\n")
+
+    with pytest.raises(ValueError, match="release verification failed"):
+        activate_release(tmp_path, commit_b)
+
+    assert (tmp_path / "current").resolve() == (tmp_path / "releases" / commit_a)
+
+
 def test_record_git_deployment_requires_exact_commit_contents(tmp_path):
     repo = tmp_path / "repo"
     deployed = tmp_path / "deployed"
@@ -69,4 +138,26 @@ def test_record_git_deployment_requires_exact_commit_contents(tmp_path):
     (deployed / "app.py").write_text("drifted\n")
 
     with pytest.raises(ValueError, match="differs from commit"):
+        record_git_deployment(repo, deployed, commit)
+
+
+def test_record_git_deployment_rejects_reused_stage_with_sitecustomize(tmp_path):
+    repo = tmp_path / "repo"
+    deployed = tmp_path / "deployed"
+    repo.mkdir()
+    deployed.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Luke Steuber"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "luke@example.test"], check=True)
+    (repo / "app.py").write_text("reviewed\n")
+    subprocess.run(["git", "-C", str(repo), "add", "app.py"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "reviewed"], check=True)
+    commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    (deployed / "app.py").write_text("reviewed\n")
+    (deployed / "sitecustomize.py").write_text("import malware\n")
+
+    with pytest.raises(ValueError, match="unexpected file: sitecustomize.py"):
         record_git_deployment(repo, deployed, commit)

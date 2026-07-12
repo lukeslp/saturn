@@ -1,6 +1,6 @@
 # Phase 5 — Flask Viewer (port 5043) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Archived implementation plan. Steps use checkbox (`- [ ]`) syntax to preserve the original progress record.
 
 **Goal:** A small Flask service on port 5043 that reads a saturn findings JSON file (single-dataset or compare) and serves an interactive, accessible web view — a live alternative to the static HTML report, so reviewers can sort/filter/deep-link without regenerating.
 
@@ -941,7 +941,7 @@ Append to `~/service_manager.py` `SERVICES` dict:
 
 Make executable: `chmod +x scripts/start.sh`. Then `pip install -e '.[web]' gunicorn`.
 
-## 3. Caddy route (via @geepers_caddy)
+## 3. Caddy route
 
 Path-stripped pattern (React-style; viewer assumes mount at root):
 
@@ -963,7 +963,7 @@ git add docs/DEPLOY.md
 git commit -m "docs: deploy saturn viewer on dr.eamer.dev (sm + caddy)"
 ```
 
-*Note:* do not edit `~/service_manager.py` or `/etc/caddy/Caddyfile` as part of this plan. Those belong to the deployment agents (`@geepers_orchestrator_deploy`, `@geepers_caddy`) and coordinate across the server's 53 services.
+*Note:* service-manager and Caddy changes were intentionally kept outside this application implementation plan because they coordinate shared server infrastructure.
 
 ---
 

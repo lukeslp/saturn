@@ -73,7 +73,7 @@ All notable changes to saturn are recorded here. The format follows [Keep a Chan
 - `InsightBundle.to_dict()` and `ReportData.insight_bundle` optional field. The `insights` key only appears in findings JSON when a bundle is present, preserving backwards compatibility.
 - `saturn version` command.
 - `docs/DEPLOY.md`: `sm` and Caddy wiring notes for the viewer.
-- `docs/superpowers/plans/`: two implementation plans used to drive this release.
+- `docs/history/plans/`: archived implementation plans for this release.
 - 82 new tests (total now 93 passing).
 
 ### Changed

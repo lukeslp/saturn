@@ -453,8 +453,6 @@ def create_app(
 
         return {
             "status": "ok",
-            "findings_dir": str(app.config["SATURN_FINDINGS_DIR"]),
-            "upload_dir": str(app.config["SATURN_UPLOAD_DIR"]),
             "default_llm": app.config["SATURN_DEFAULT_LLM"],
             "deployment_commit": deployment_commit(),
         }

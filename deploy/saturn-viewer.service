@@ -1,0 +1,24 @@
+# Native systemd owner for the public Saturn research workbench.
+[Unit]
+Description=Saturn research workbench
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=coolhand
+Group=coolhand
+WorkingDirectory=/home/coolhand/projects/saturn
+EnvironmentFile=-/etc/dreamer/secrets.env
+Environment=SATURN_DEFAULT_LLM=openai:gpt-5.6-luna
+Environment=SATURN_PUBLIC_KEYS=1
+ExecStart=/home/coolhand/projects/saturn/current/scripts/start.sh
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

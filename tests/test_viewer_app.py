@@ -77,7 +77,8 @@ def test_health_endpoint(client, findings_dir):
     assert resp.is_json
     body = resp.get_json()
     assert body["status"] == "ok"
-    assert body["findings_dir"] == str(findings_dir)
+    assert "findings_dir" not in body
+    assert "upload_dir" not in body
 
 
 def test_health_endpoint_reports_deployment_commit(tmp_path, monkeypatch):

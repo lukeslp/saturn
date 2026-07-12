@@ -15,21 +15,17 @@ open http://127.0.0.1:5043
 
 ### 1. Service registration
 
-Run the viewer as the unprivileged `coolhand` user on loopback port 5043. The service definition should use:
+Run the viewer as the unprivileged `coolhand` user on loopback port 5043. Install `deploy/saturn-viewer.service`; its stable paths are:
 
 ```text
-working directory: /home/coolhand/projects/saturn/saturn
-command: /home/coolhand/projects/saturn/saturn/scripts/start.sh
+working directory: /home/coolhand/projects/saturn
+command: /home/coolhand/projects/saturn/current/scripts/start.sh
 health check: http://localhost:5043/health
 ```
 
 ### 2. `scripts/start.sh` (already committed)
 
-Install the deployed environment with the viewer and provider gateway:
-
-```bash
-pip install -e '.[web,llm]'
-```
+The launcher resolves the physical commit-addressed source directory behind `current`, verifies its provenance manifest, and activates the matching environment under `venvs/<commit>/`. Source and environment directories are never modified after activation. `PYTHONDONTWRITEBYTECODE=1` prevents runtime cache files from appearing in the verified source tree.
 
 Configure the service to inject `OPENAI_API_KEY` into the process environment for the default `openai:gpt-5.6-luna` workflow. Store the secret in the deployment platform's secret/environment facility, outside this repository; do not put it in `scripts/start.sh` or a tracked dotenv file. A different `SATURN_DEFAULT_LLM` requires that provider's standard environment key.
 
@@ -45,22 +41,27 @@ exec gunicorn \
     "saturn.viewer.app:create_app(findings_dir='${FINDINGS_DIR}')"
 ```
 
-Environment knobs: `OPENAI_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`, `SATURN_DEPLOY_MANIFEST`. Defaults: `openai:gpt-5.6-luna`, `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`, and `.saturn-deployment.json` in the working directory. `OPENAI_API_KEY` has no default and must be explicitly injected for the default public model workflow. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
+Environment knobs: `OPENAI_API_KEY`, `SATURN_DEFAULT_LLM`, `SATURN_FINDINGS_DIR`, `SATURN_PORT`, `SATURN_HOST`, `SATURN_WORKERS`, `SATURN_THREADS`, and `SATURN_DEPLOY_ROOT`. Defaults: `openai:gpt-5.6-luna`, `/home/coolhand/saturn-findings`, `5043`, `127.0.0.1`, `1`, `8`, and the parent of `releases/`. The launcher sets `SATURN_DEPLOY_MANIFEST` to the exact active release manifest. `OPENAI_API_KEY` has no default and must be explicitly injected for the default public model workflow. Keep one worker while background job state is process-local; the eight request threads serve reads and job polling while work runs in the bounded executor.
 
 ### 3. Deploy one reviewed commit
 
-Deploy from an explicit commit, not from a mutable working tree. Extract that commit into a staging directory, record the tracked-file hashes, and verify the manifest before switching the service to it:
+Deploy from an explicit commit, not from a mutable working tree. The release script creates fresh source and environment staging directories, verifies an exact tracked-file inventory, installs the environment outside the source tree, then atomically switches `current`:
 
 ```bash
+git fetch origin
 COMMIT="$(git rev-parse origin/main)"
-STAGE="/home/coolhand/projects/saturn/releases/$COMMIT"
-mkdir -p "$STAGE"
-git archive "$COMMIT" | tar -x -C "$STAGE"
-python -m saturn.deployment record "$COMMIT" "$STAGE" --repo "$PWD"
-python "$STAGE/saturn/deployment.py" verify "$STAGE"
+scripts/deploy-release.sh "$COMMIT" /home/coolhand/projects/saturn "$PWD"
+sudo systemctl restart saturn-viewer
 ```
 
-The record command refuses a staging tree whose tracked files differ from the selected commit. The verifier detects missing or changed deployed files. The `/health` response exposes the recorded commit as `deployment_commit`; compare it with the release SHA after restart. Keep the previous release available for rollback.
+The record command refuses reused staging, missing or changed tracked files, extra regular files (including `sitecustomize.py`), and every symlink. The `/health` response exposes only service status, the default model, and `deployment_commit`; compare the commit with the release SHA after restart.
+
+Rollback does not rebuild or mutate either release. Atomically point `current` at a previously verified release and restart:
+
+```bash
+scripts/activate-release.sh PREVIOUS_FULL_COMMIT /home/coolhand/projects/saturn
+sudo systemctl restart saturn-viewer
+```
 
 ### 4. Findings directory
 
@@ -109,7 +110,7 @@ sudo systemctl reload caddy
 curl -s https://dr.eamer.dev/saturn/health
 ```
 
-Expected: `{"findings_dir":"/home/coolhand/saturn-findings","status":"ok"}`.
+Expected: a JSON object containing `"status":"ok"` and the active `deployment_commit`. Filesystem paths are intentionally omitted.
 
 ## Security posture
 
@@ -122,7 +123,7 @@ Expected: `{"findings_dir":"/home/coolhand/saturn-findings","status":"ok"}`.
 ## Verification
 
 ```bash
-sm status | grep saturn                         # expect Running + healthy
+systemctl is-active saturn-viewer               # expect active
 curl -s http://127.0.0.1:5043/health            # expect {"status":"ok",...}
 curl -s http://127.0.0.1:5043/ | grep -c Find   # expect 1+ (Findings heading)
 # after Caddy applied:

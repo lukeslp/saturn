@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Saturn viewer launcher for dr.eamer.dev (sm-managed, port 5043).
+# Saturn viewer launcher for dr.eamer.dev (managed service, port 5043).
 #
 # Reads findings JSON files out of /home/coolhand/saturn-findings/.
-# Backing venv: /home/coolhand/projects/saturn/saturn/venv (installed with [web,llm]).
+# Source and virtual environments are immutable, commit-addressed releases.
 
 set -euo pipefail
 
-APP_DIR="/home/coolhand/projects/saturn/saturn"
+SCRIPT_DIR="$(cd -P "$(dirname "$0")" && pwd)"
+APP_DIR="$(cd -P "$SCRIPT_DIR/.." && pwd)"
+DEPLOY_ROOT="${SATURN_DEPLOY_ROOT:-$(dirname "$(dirname "$APP_DIR")")}"
 FINDINGS_DIR="${SATURN_FINDINGS_DIR:-/home/coolhand/saturn-findings}"
 LEGACY_ARCHIVE_DIR="${SATURN_LEGACY_ARCHIVE_DIR:-/home/coolhand/www/dr.eamer.dev/saturn/view}"
 PORT="${SATURN_PORT:-5043}"
@@ -17,8 +19,14 @@ HOST="${SATURN_HOST:-127.0.0.1}"
 WORKERS="${SATURN_WORKERS:-1}"
 THREADS="${SATURN_THREADS:-8}"
 
+export SATURN_DEPLOY_MANIFEST="$APP_DIR/.saturn-deployment.json"
+DEPLOY_COMMIT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$SATURN_DEPLOY_MANIFEST")"
+VENV_DIR="$DEPLOY_ROOT/venvs/$DEPLOY_COMMIT"
+python3 "$APP_DIR/saturn/deployment.py" verify "$APP_DIR"
+test -x "$VENV_DIR/bin/python"
 cd "$APP_DIR"
-source venv/bin/activate
+source "$VENV_DIR/bin/activate"
+export PYTHONDONTWRITEBYTECODE=1
 # Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
 export SATURN_TRUST_FORWARDED_PREFIX=1
 export SATURN_LEGACY_ARCHIVE_DIR="$LEGACY_ARCHIVE_DIR"

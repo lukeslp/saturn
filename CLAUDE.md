@@ -108,7 +108,7 @@ Engaged only when `--llm provider[:model]` is passed. Five small modules:
 - `parsing.py`: tolerant JSON extraction plus schema validation.
 - `engine.py`: orchestrates primary insight + optional catfish critique with fail-open error handling.
 
-`ReportData.insight_bundle` is populated before `to_findings()` serialises; the `insights` key only appears in the JSON when a bundle exists. See `docs/superpowers/plans/2026-04-22-phase2-llm-insight-pass.md` for the full task ladder.
+`ReportData.insight_bundle` is populated before `to_findings()` serialises; the `insights` key only appears in the JSON when a bundle exists. See `docs/history/plans/2026-04-22-phase2-llm-insight-pass.md` for the archived implementation sequence.
 
 ### `saturn/viewer/`: live Flask viewer (Phase 5, shipped)
 

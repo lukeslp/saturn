@@ -1,6 +1,6 @@
 # Phase 2 — Multi-LLM Insight Pass Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Archived implementation plan. Steps use checkbox (`- [ ]`) syntax to preserve the original progress record.
 
 **Goal:** Add an opt-in `--llm` flag to `saturn analyze` and `saturn compare` that turns the deterministic findings into narrated, cross-critiqued insights via two or more language models, without ever breaking the free-and-deterministic default output.
 

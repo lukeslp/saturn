@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Iterable
 
@@ -38,6 +39,37 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _deployed_entries(root: Path) -> tuple[set[str], set[str]]:
+    """Return regular files and symlinks without following deployed links."""
+    regular: set[str] = set()
+    symlinks: set[str] = set()
+    root = root.resolve()
+    for directory, names, files in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        for name in names:
+            path = directory_path / name
+            if path.is_symlink():
+                symlinks.add(path.relative_to(root).as_posix())
+        for name in files:
+            path = directory_path / name
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                symlinks.add(relative)
+            elif path.is_file():
+                regular.add(relative)
+    return regular, symlinks
+
+
+def _inventory_errors(root: Path, expected: set[str], *, manifest_allowed: bool) -> list[str]:
+    regular, symlinks = _deployed_entries(root)
+    allowed = set(expected)
+    if manifest_allowed:
+        allowed.add(MANIFEST_NAME)
+    errors = [f"unexpected file: {path}" for path in sorted(regular - allowed)]
+    errors.extend(f"unexpected symlink: {path}" for path in sorted(symlinks))
+    return errors
+
+
 def create_manifest(root: Path, *, commit: str, paths: Iterable[str]) -> dict:
     if not _COMMIT.fullmatch(commit):
         raise ValueError("deployment commit must be a 7-40 character lowercase SHA")
@@ -62,6 +94,7 @@ def verify_manifest(root: Path, manifest_path: Path | None = None) -> list[str]:
     files = payload.get("files")
     if not isinstance(files, dict):
         return errors + ["invalid deployment file inventory"]
+    errors.extend(_inventory_errors(root, set(files), manifest_allowed=True))
     for relative, expected in sorted(files.items()):
         try:
             path = _safe_path(root, relative)
@@ -95,6 +128,11 @@ def record_git_deployment(repo: Path, root: Path, commit: str) -> Path:
         ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", resolved],
         check=True, capture_output=True, text=True,
     ).stdout.splitlines()
+    if (root / MANIFEST_NAME).exists() or (root / MANIFEST_NAME).is_symlink():
+        raise ValueError("deployment staging directory is not fresh: manifest already exists")
+    inventory_errors = _inventory_errors(root, set(names), manifest_allowed=False)
+    if inventory_errors:
+        raise ValueError("deployment staging differs from commit: " + "; ".join(inventory_errors))
     payload = create_manifest(root, commit=resolved, paths=names)
     for relative, deployed_hash in payload["files"].items():
         source = subprocess.run(
@@ -108,6 +146,32 @@ def record_git_deployment(repo: Path, root: Path, commit: str) -> Path:
     return destination
 
 
+def activate_release(deploy_root: Path, commit: str) -> Path:
+    """Atomically point ``current`` at one verified immutable release."""
+    if not _COMMIT.fullmatch(commit) or len(commit) != 40:
+        raise ValueError("release activation requires a full 40-character commit SHA")
+    deploy_root = deploy_root.resolve()
+    release = deploy_root / "releases" / commit
+    manifest = release / MANIFEST_NAME
+    errors = verify_manifest(release, manifest)
+    if errors:
+        raise ValueError("release verification failed: " + "; ".join(errors))
+    if deployment_commit(manifest) != commit:
+        raise ValueError("release manifest commit does not match release directory")
+    python = deploy_root / "venvs" / commit / "bin" / "python"
+    if not python.is_file() or python.is_symlink():
+        raise ValueError(f"release environment is missing: {python}")
+
+    current = deploy_root / "current"
+    temporary = deploy_root / f".current-{uuid.uuid4().hex}"
+    temporary.symlink_to(Path("releases") / commit, target_is_directory=True)
+    try:
+        os.replace(temporary, current)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return current
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Record or verify a Saturn deployment")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -117,9 +181,15 @@ def main() -> int:
     record.add_argument("--repo", type=Path, default=Path.cwd())
     verify = sub.add_parser("verify")
     verify.add_argument("root", type=Path)
+    activate = sub.add_parser("activate")
+    activate.add_argument("commit")
+    activate.add_argument("deploy_root", type=Path)
     args = parser.parse_args()
     if args.command == "record":
         print(record_git_deployment(args.repo, args.root, args.commit))
+        return 0
+    if args.command == "activate":
+        print(activate_release(args.deploy_root, args.commit))
         return 0
     errors = verify_manifest(args.root)
     if errors:
