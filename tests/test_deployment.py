@@ -137,6 +137,42 @@ def test_activate_release_rejects_symlinked_environment_python(tmp_path):
         activate_release(tmp_path, commit)
 
 
+def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
+    target = tmp_path / "runtime with spaces;and-metacharacters"
+    target.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$@\"\n")
+    target.chmod(0o755)
+    python = tmp_path / "venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(target)
+    script = Path(__file__).parents[1] / "scripts" / "materialize-venv-python.sh"
+
+    subprocess.run([script, python], check=True)
+    result = subprocess.run(
+        [python, "argument with spaces", ";$(not-a-command)"],
+        check=True, capture_output=True, text=True,
+    )
+
+    assert not python.is_symlink()
+    assert result.stdout.splitlines() == ["argument with spaces", ";$(not-a-command)"]
+
+
+def test_materialized_python_launcher_rejects_target_drift(tmp_path):
+    target = tmp_path / "runtime"
+    target.write_text("#!/usr/bin/env bash\nexit 0\n")
+    target.chmod(0o755)
+    python = tmp_path / "venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(target)
+    script = Path(__file__).parents[1] / "scripts" / "materialize-venv-python.sh"
+    subprocess.run([script, python], check=True)
+    target.write_text("#!/usr/bin/env bash\nexit 42\n")
+
+    result = subprocess.run([python], capture_output=True, text=True)
+
+    assert result.returncode == 126
+    assert "interpreter changed after deployment" in result.stderr
+
+
 def test_record_git_deployment_requires_exact_commit_contents(tmp_path):
     repo = tmp_path / "repo"
     deployed = tmp_path / "deployed"

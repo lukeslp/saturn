@@ -33,17 +33,7 @@ rmdir "$VENV_STAGE"
 python3 -m venv "$VENV_STAGE"
 "$VENV_STAGE/bin/pip" install --disable-pip-version-check "$STAGE[web,llm]"
 VENV_PYTHON="$VENV_STAGE/bin/python"
-if [[ -L "$VENV_PYTHON" ]]; then
-    REAL_PYTHON="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$VENV_PYTHON")"
-    cp "$REAL_PYTHON" "$VENV_PYTHON.regular"
-    chmod 755 "$VENV_PYTHON.regular"
-    rm "$VENV_PYTHON"
-    mv "$VENV_PYTHON.regular" "$VENV_PYTHON"
-fi
-if [[ ! -f "$VENV_PYTHON" || -L "$VENV_PYTHON" ]]; then
-    echo "release environment requires a regular bin/python executable" >&2
-    exit 1
-fi
+"$STAGE/scripts/materialize-venv-python.sh" "$VENV_PYTHON"
 
 mv "$VENV_STAGE" "$VENV"
 mv "$STAGE" "$RELEASE"

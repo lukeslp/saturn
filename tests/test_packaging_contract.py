@@ -49,7 +49,6 @@ def test_release_script_uses_fresh_stages_and_atomic_activation():
     assert 'record "$COMMIT" "$STAGE"' in script
     assert 'verify "$STAGE"' in script
     assert 'python3 -m venv "$VENV_STAGE"' in script
-    assert 'REAL_PYTHON="$(python3 -c' in script
-    assert '[[ ! -f "$VENV_PYTHON" || -L "$VENV_PYTHON" ]]' in script
+    assert 'materialize-venv-python.sh" "$VENV_PYTHON"' in script
     assert 'chmod -R a-w "$RELEASE" "$VENV"' in script
     assert 'activate "$COMMIT" "$DEPLOY_ROOT"' in script
