@@ -120,6 +120,23 @@ def test_failed_release_verification_leaves_current_unchanged(tmp_path):
     assert (tmp_path / "current").resolve() == (tmp_path / "releases" / commit_a)
 
 
+def test_activate_release_rejects_symlinked_environment_python(tmp_path):
+    commit = "a" * 40
+    release = tmp_path / "releases" / commit
+    release.mkdir(parents=True)
+    (release / "app.py").write_text("reviewed\n")
+    payload = create_manifest(release, commit=commit, paths=["app.py"])
+    (release / ".saturn-deployment.json").write_text(json.dumps(payload))
+    python = tmp_path / "venvs" / commit / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    interpreter = tmp_path / "python3"
+    interpreter.write_text("#!/bin/sh\n")
+    python.symlink_to(interpreter)
+
+    with pytest.raises(ValueError, match="release environment is missing"):
+        activate_release(tmp_path, commit)
+
+
 def test_record_git_deployment_requires_exact_commit_contents(tmp_path):
     repo = tmp_path / "repo"
     deployed = tmp_path / "deployed"

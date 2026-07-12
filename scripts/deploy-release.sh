@@ -30,7 +30,7 @@ python3 "$STAGE/saturn/deployment.py" record "$COMMIT" "$STAGE" --repo "$REPO"
 python3 "$STAGE/saturn/deployment.py" verify "$STAGE"
 
 rmdir "$VENV_STAGE"
-python3 -m venv "$VENV_STAGE"
+python3 -m venv --copies "$VENV_STAGE"
 "$VENV_STAGE/bin/pip" install --disable-pip-version-check "$STAGE[web,llm]"
 
 mv "$VENV_STAGE" "$VENV"

@@ -48,6 +48,6 @@ def test_release_script_uses_fresh_stages_and_atomic_activation():
     assert 'git -C "$REPO" archive "$COMMIT"' in script
     assert 'record "$COMMIT" "$STAGE"' in script
     assert 'verify "$STAGE"' in script
-    assert 'python3 -m venv "$VENV_STAGE"' in script
+    assert 'python3 -m venv --copies "$VENV_STAGE"' in script
     assert 'chmod -R a-w "$RELEASE" "$VENV"' in script
     assert 'activate "$COMMIT" "$DEPLOY_ROOT"' in script
