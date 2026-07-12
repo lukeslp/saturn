@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,8 +141,7 @@ def test_activate_release_rejects_symlinked_environment_python(tmp_path):
 
 def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
     target = tmp_path / "runtime with spaces;and-metacharacters"
-    target.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$@\"\n")
-    target.chmod(0o755)
+    shutil.copy2(sys.executable, target)
     python = tmp_path / "venv" / "bin" / "python"
     python.parent.mkdir(parents=True)
     python.symlink_to(target)
@@ -148,7 +149,8 @@ def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
 
     subprocess.run([script, python], check=True)
     result = subprocess.run(
-        [python, "argument with spaces", ";$(not-a-command)"],
+        [python, "-c", "import sys; print('\\n'.join(sys.argv[1:]))",
+         "argument with spaces", ";$(not-a-command)"],
         check=True, capture_output=True, text=True,
     )
 
@@ -158,14 +160,14 @@ def test_materialized_python_launcher_quotes_target_and_arguments(tmp_path):
 
 def test_materialized_python_launcher_rejects_target_drift(tmp_path):
     target = tmp_path / "runtime"
-    target.write_text("#!/usr/bin/env bash\nexit 0\n")
-    target.chmod(0o755)
+    shutil.copy2(sys.executable, target)
     python = tmp_path / "venv" / "bin" / "python"
     python.parent.mkdir(parents=True)
     python.symlink_to(target)
     script = Path(__file__).parents[1] / "scripts" / "materialize-venv-python.sh"
     subprocess.run([script, python], check=True)
-    target.write_text("#!/usr/bin/env bash\nexit 42\n")
+    with target.open("ab") as handle:
+        handle.write(b"drift")
 
     result = subprocess.run([python], capture_output=True, text=True)
 
