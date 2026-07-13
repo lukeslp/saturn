@@ -43,12 +43,12 @@ def test_resolve_byok_with_explicit_provider(app):
     assert key == "sk-mine"
 
 
-def test_resolve_byok_assumes_anthropic_when_no_provider(app):
+def test_resolve_byok_assumes_openai_luna_when_no_provider(app):
     from saturn.viewer.app import _resolve_llm_request
 
     form = {"api_key": "sk-mine"}
     provider, key = _resolve_llm_request(app, form)
-    assert provider == "anthropic"
+    assert provider == "openai:gpt-5.6-luna"
     assert key == "sk-mine"
 
 
@@ -280,6 +280,37 @@ def test_backfill_passes_api_key_to_runner(client, tmp_path, monkeypatch):
     _dir, _fid, provider, api_key = captured["args"]
     assert provider == "groq"
     assert api_key == "gsk-mine"
+
+
+def test_backfill_replaces_findings_atomically(tmp_path, monkeypatch):
+    from saturn.insights import InsightBundle
+    from saturn.viewer.runner import backfill_insights
+
+    path = tmp_path / "demo.json"
+    path.write_text(json.dumps({
+        "saturn_version": "0.2.0",
+        "meta": {"source": "s", "row_count": 1, "sampled_rows": 1, "seed": 0,
+                 "mode": "full", "generated_at": "2026-04-23T00:00:00+00:00"},
+        "schema": {}, "language_counts": {}, "notes": [], "columns": [],
+    }))
+    monkeypatch.setattr(
+        "saturn.llm.engine.run_insights",
+        lambda *args, **kwargs: InsightBundle(providers=["groq:test"]),
+    )
+    calls = []
+    from saturn import report as report_module
+    real_atomic_write = report_module._atomic_write_text
+
+    def recording_atomic_write(output, content):
+        calls.append(Path(output))
+        real_atomic_write(output, content)
+
+    monkeypatch.setattr(report_module, "_atomic_write_text", recording_atomic_write)
+
+    backfill_insights("job", tmp_path, "demo", "groq:test", api_key="gsk-test")
+
+    assert calls == [path]
+    assert json.loads(path.read_text())["insights"]["providers"] == ["groq:test"]
 
 
 def test_analyze_no_byok_no_default_redirects_to_stats_only(client, app, monkeypatch):

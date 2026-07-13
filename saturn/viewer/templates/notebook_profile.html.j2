@@ -67,7 +67,7 @@ import subprocess
 subprocess.run([
     "saturn", "huggingface", "{{ doc.meta.source.removeprefix('hf://') }}",
     "--findings", "{{ doc.id }}.json",
-    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'openai:gpt-5.6-luna') }}",
 ])
 {%- else -%}
 !pip install saturn-dissect
@@ -75,7 +75,7 @@ import subprocess
 subprocess.run([
     "saturn", "analyze", "{{ doc.meta.source }}",
     "--findings", "{{ doc.id }}.json",
-    "--llm", "{{ (insights.providers|first if insights.providers else 'anthropic') }}",
+    "--llm", "{{ (insights.providers|first if insights.providers else 'openai:gpt-5.6-luna') }}",
 ])
 {%- endif %}</code></pre>
   </article>

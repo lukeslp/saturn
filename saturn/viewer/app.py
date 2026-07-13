@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -25,8 +26,18 @@ from typing import Any
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 from werkzeug.utils import secure_filename
 
+from saturn import __version__
+
 from .loader import FindingsKind, list_findings, load_findings
-from .runner import analyze_hf, analyze_upload, backfill_insights, get_job, start_job
+from .runner import (
+    JobCapacityError,
+    analyze_hf,
+    analyze_upload,
+    backfill_insights,
+    cleanup_expired,
+    get_job,
+    start_job,
+)
 
 DEFAULT_PORT = 5043
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -122,8 +133,8 @@ def _resolve_llm_request(app, form, *, allow_no_llm: bool = True) -> tuple[str |
     provider = (form.get("llm") or app.config["SATURN_DEFAULT_LLM"] or "").strip() or None
     api_key = (form.get("api_key") or "").strip() or None
     if api_key and not provider:
-        # User pasted a key but no provider — assume the most-common case.
-        provider = "anthropic"
+        # User pasted a key but no provider: use the hosted demo default.
+        provider = "openai:gpt-5.6-luna"
     # Ollama can run with no real key; gateway just needs *something* truthy
     # to avoid MissingKeyError. The provider class itself will pick the host.
     if provider and provider.split(":", 1)[0] == "ollama" and not api_key:
@@ -137,16 +148,36 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         template_folder=str(Path(__file__).parent / "templates"),
         static_folder=str(Path(__file__).parent / "static"),
     )
+    app.jinja_env.globals["saturn_version"] = __version__
     app.config["SATURN_FINDINGS_DIR"] = Path(findings_dir)
     app.config["SATURN_UPLOAD_DIR"] = Path(
-        os.environ.get("SATURN_UPLOAD_DIR", tempfile.gettempdir()) + "/saturn-uploads"
+        os.environ.get("SATURN_UPLOAD_DIR", str(Path(tempfile.gettempdir()) / "saturn-uploads"))
     )
     app.config["SATURN_UPLOAD_DIR"].mkdir(parents=True, exist_ok=True)
-    app.config["SATURN_DEFAULT_LLM"] = os.environ.get("SATURN_DEFAULT_LLM", "anthropic")
+    app.config["SATURN_DEFAULT_LLM"] = os.environ.get(
+        "SATURN_DEFAULT_LLM", "openai:gpt-5.6-luna"
+    )
     app.config["TESTING"] = testing
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     app.config["SECRET_KEY"] = os.environ.get("SATURN_SECRET_KEY") or os.urandom(24).hex()
     app.wsgi_app = PrefixMiddleware(app.wsgi_app)
+    janitor_interval = int(os.environ.get("SATURN_JANITOR_INTERVAL_SECONDS", "300"))
+    janitor_last_run = 0.0
+
+    @app.before_request
+    def run_janitor_if_due():
+        nonlocal janitor_last_run
+        now = time.time()
+        if now - janitor_last_run >= janitor_interval:
+            cleanup_expired(
+                upload_dir=app.config["SATURN_UPLOAD_DIR"],
+                upload_ttl=int(os.environ.get("SATURN_UPLOAD_TTL_SECONDS", "3600")),
+                job_ttl=int(os.environ.get("SATURN_JOB_TTL_SECONDS", "86400")),
+                result_ttl=int(os.environ.get("SATURN_RESULT_TTL_SECONDS", "86400")),
+                now=now,
+                findings_dir=app.config["SATURN_FINDINGS_DIR"],
+            )
+            janitor_last_run = now
 
     # ---------- read-only routes --------------------------------------------
 
@@ -275,7 +306,8 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         path = _safe_findings_path(app.config["SATURN_FINDINGS_DIR"], id)
         if path is None or not path.is_file():
             abort(404)
-        return load_findings(path).raw
+        doc = load_findings(path)
+        return doc.artifact if doc.artifact is not None else doc.raw
 
     @app.get("/view/<id>.ipynb")
     def view_ipynb(id: str):
@@ -398,15 +430,21 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         base = _slug(Path(filename).stem, "upload")
         finding_id = _unique_finding_id(app.config["SATURN_FINDINGS_DIR"], base)
 
-        job = start_job(
-            "analyze-upload",
-            analyze_upload,
-            app.config["SATURN_FINDINGS_DIR"],
-            upload_path,
-            finding_id,
-            provider,
-            api_key,
-        )
+        try:
+            job = start_job(
+                "analyze-upload",
+                analyze_upload,
+                app.config["SATURN_FINDINGS_DIR"],
+                upload_path,
+                finding_id,
+                provider,
+                api_key,
+            )
+        except JobCapacityError as e:
+            import shutil
+            shutil.rmtree(upload_subdir, ignore_errors=True)
+            flash(str(e), "error")
+            return redirect(url_for("index"))
         return redirect(url_for("job_view", job_id=job.id))
 
     @app.post("/analyze-hf")
@@ -430,7 +468,7 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
                 provider,
                 api_key,
             )
-        except ValueError as e:
+        except (ValueError, JobCapacityError) as e:
             flash(str(e), "error")
             return redirect(url_for("index"))
         return redirect(url_for("job_view", job_id=job.id))
@@ -444,14 +482,18 @@ def create_app(*, findings_dir: Path, testing: bool = False) -> Flask:
         if not provider:
             flash("Pick a provider (or supply an API key) to generate a summary.", "error")
             return redirect(url_for("view", id=id))
-        job = start_job(
-            "backfill",
-            backfill_insights,
-            app.config["SATURN_FINDINGS_DIR"],
-            id,
-            provider,
-            api_key,
-        )
+        try:
+            job = start_job(
+                "backfill",
+                backfill_insights,
+                app.config["SATURN_FINDINGS_DIR"],
+                id,
+                provider,
+                api_key,
+            )
+        except JobCapacityError as e:
+            flash(str(e), "error")
+            return redirect(url_for("view", id=id))
         return redirect(url_for("job_view", job_id=job.id))
 
     # ---------- job status --------------------------------------------------

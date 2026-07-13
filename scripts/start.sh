@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Saturn viewer launcher for dr.eamer.dev (sm-managed, port 5043).
+# Saturn viewer launcher for dr.eamer.dev (systemd-managed, port 5043).
 #
 # Reads findings JSON files out of /home/coolhand/saturn-findings/.
-# Backing venv: /home/coolhand/projects/saturn/saturn/venv (installed with [web] extra).
+# Backing venv: /home/coolhand/projects/saturn/saturn/venv (installed with [web,llm]).
 
 set -euo pipefail
 
@@ -22,11 +22,10 @@ export PYTHONPATH="/home/coolhand/shared:${PYTHONPATH:-}"
 # Trust X-Forwarded-Prefix from Caddy so url_for() prepends /saturn behind the proxy.
 export SATURN_TRUST_FORWARDED_PREFIX=1
 
-# Demo posture: every public request runs the LLM pass against Opus on the
-# server's account. shared/config/ConfigManager picks up ANTHROPIC_API_KEY
-# from ~/documentation/API_KEYS.md, so we don't hardcode it here. Override
-# SATURN_DEFAULT_LLM if a future demo wants a different provider/model.
-export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-anthropic:claude-opus-4-7}"
+# Demo posture: public requests run the lightweight LLM pass against OpenAI
+# Luna. The service environment supplies OPENAI_API_KEY; no credential belongs
+# in this script or the repository.
+export SATURN_DEFAULT_LLM="${SATURN_DEFAULT_LLM:-openai:gpt-5.6-luna}"
 # Demo posture: anonymous uploads silently use the server's keys. Without
 # this flag, public submissions are forced into BYOK mode (or fail). For a
 # self-hosted private instance, leave this unset so visitors can't drain

@@ -4,7 +4,7 @@
 {% block main %}
 
 <section class="hero">
-  <p class="eyebrow">dataset dissector · v0.2.0</p>
+  <p class="eyebrow">dataset dissector · v{{ saturn_version }}</p>
   <h1>Point saturn at a dataset. Get a plain-language <em>reading</em> and every number behind it.</h1>
   <p class="lede">
     Drop a spreadsheet, CSV, JSONL, Parquet, SQLite, or Arrow file, or paste a HuggingFace
@@ -24,7 +24,7 @@
       <input type="file" name="file" id="file-input"
              accept=".csv,.tsv,.jsonl,.ndjson,.json,.parquet,.feather,.arrow,.xlsx,.xls,.xlsb,.ods,.db,.sqlite,.sqlite3">
     </label>
-    <p class="hint" style="margin-bottom: 0.25rem;">By default this demo runs Opus on the server's account. Paste your own API key below to use a different provider; it's used once for this run and never stored. Pick "ollama (local)" to call a self-hosted model (only reachable when saturn runs on your own machine).</p>
+    <p class="hint" style="margin-bottom: 0.25rem;">By default this demo runs OpenAI GPT-5.6 Luna on the server's account. Paste your own API key below to use a different provider; it's used once for this run and never stored. Pick "ollama (local)" to call a self-hosted model (only reachable when saturn runs on your own machine).</p>
     {{ byok_fields("upload", default_provider=default_llm, compact=True) }}
     <label class="checkbox">
       <input type="checkbox" name="no_llm" value="1">
