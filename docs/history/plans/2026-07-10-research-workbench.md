@@ -1,5 +1,10 @@
 # Research Workbench Implementation Plan
 
+> **Historical plan.** This document produced the current contract and helper,
+> but its user-configured external-helper assumption no longer describes
+> Citewrite's embedded native XPC analyzer. Continue from the canonical
+> [Saturn Workbench Plan](../../product/SATURN_WORKBENCH.md).
+
 > Implementation uses test-first repair slices, an independent review after
 > each task, and explicit commits/checkpoints.
 

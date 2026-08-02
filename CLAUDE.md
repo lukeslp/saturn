@@ -132,6 +132,13 @@ Reads JSON findings off disk and serves them via Flask on port 5043. Routes: `/`
 
 ## Roadmap (shipping vs. planned)
 
+The canonical cross-product desktop and connector roadmap is
+[`docs/product/SATURN_WORKBENCH.md`](docs/product/SATURN_WORKBENCH.md). Its two
+first gates are the mixed-file Drop Shelf prototype and the signed universal
+worker packaging spike. The older July research-workbench documents under
+`docs/history/` explain how the current helper and contract emerged; they are
+not the active desktop architecture.
+
 - **Phase 1** (shipped): stats pass, HTML, JSON
 - **Phase 2** (shipped): `--llm provider[:model]` insight pass with catfish critic, analyze and huggingface commands
 - **Phase 2.5** (shipped): compare-mode insight pass with pair evidence and delta-aware prompts

@@ -8,6 +8,14 @@ Generic across domains: alt-text, Bluesky firehose, census tables, VQA annotatio
 
 Primary use case: [lukeslp/bluesky-alt-text](https://huggingface.co/datasets/lukeslp/bluesky-alt-text), 404,841 image descriptions, profiled in 46 s, compared across the curated/firehose split in 18 s.
 
+## Workbench direction
+
+The recommended product direction extends Saturn into a native macOS research
+workbench with a menu-bar Drop Shelf, local and remote dataset connectors, and
+modular Papers, Data, and Media workspaces. The current CLI and viewer ship
+today. Two validation spikes gate the desktop work. See the canonical
+[Saturn Workbench Plan](docs/product/SATURN_WORKBENCH.md).
+
 ## How saturn differs from other profilers
 
 | | saturn | ydata-profiling | sweetviz | dataprep |

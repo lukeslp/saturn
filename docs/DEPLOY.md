@@ -1,5 +1,12 @@
 # Deploying the saturn viewer on dr.eamer.dev
 
+> **Current public posture (verified 2026-08-02):** the managed viewer runs on
+> loopback port 5043, while public `/saturn/` serves a static archive. Caddy does
+> not currently proxy the mutation service. Do not apply the route documented
+> below until the authentication, tenancy, quota, retention, private-result,
+> and server-key-isolation gates in the
+> [Saturn Workbench Plan](product/SATURN_WORKBENCH.md#web-hardening-gates) pass.
+
 The public viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
 
 ## Local dev
@@ -86,9 +93,11 @@ saturn analyze <source> \
 
 Then refresh the viewer in the browser. No restart needed. The index sorts newest-first by mtime.
 
-### 5. Caddy route
+### 5. Future Caddy route
 
-Append to `/etc/caddy/Caddyfile` inside the `dr.eamer.dev { ... }` block. Two directives: a redirect for bare `/saturn` and the path-stripped reverse proxy for everything under it:
+After the web hardening gates pass, append to `/etc/caddy/Caddyfile` inside the
+`dr.eamer.dev { ... }` block. Two directives are required: a redirect for bare
+`/saturn` and the path-stripped reverse proxy for everything under it:
 
 ```caddyfile
 redir /saturn /saturn/ 308

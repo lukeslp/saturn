@@ -1,5 +1,10 @@
 # Citewrite Research & Visualization Workbench Design
 
+> **Historical design.** This records the origin of the current research
+> workbench, helper, and contract. Citewrite now uses an embedded native XPC
+> analyzer. Continue from the canonical
+> [Saturn Workbench Plan](../../product/SATURN_WORKBENCH.md).
+
 ## Product direction
 
 Citewrite will become a project-based desktop research workbench. A project can
