@@ -7,7 +7,7 @@
 > and server-key-isolation gates in the
 > [Saturn Workbench Plan](product/SATURN_WORKBENCH.md#web-hardening-gates) pass.
 
-The public viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
+The upload-capable viewer's default model workflow requires both optional extras (`pip install 'saturn-dissect[web,llm]'`). A viewer without provider credentials remains usable: model insight fails open and the deterministic analysis is still returned.
 
 ## Local dev
 
@@ -125,7 +125,7 @@ Expected: a JSON object containing `"status":"ok"` and the active `deployment_co
 
 - **Mutation surface.** `POST /analyze` uploads a local dataset, `POST /analyze-hf` queues a Hugging Face dataset, and `POST /backfill/<id>` adds an LLM reading to an existing finding. Bound request sizes, extension checks, the bounded job queue, and deployment access controls are therefore security boundaries. GET routes continue to serve findings and job status.
 - **Path-traversal guard.** `_safe_findings_path` in `saturn/viewer/app.py` resolves every `<id>` against the configured findings dir and 404s anything that escapes. Belt and suspenders; Flask's default string converter already forbids `/`.
-- **No PII by design.** saturn's findings are aggregates (counts, rates, alerts, top values, language mix). Still: treat the findings dir like any public directory. Don't drop findings from a dataset you can't share. `top_values` on a free-text column can surface snippets of actual content.
+- **Findings can contain personal data.** Counts and rates are aggregates, but `top_values` and frequent words can reproduce names, handles, or free text. Source paths and column names may also be sensitive. Treat access to the findings directory as access to the data it reveals; do not expose private findings through a public viewer.
 - **Rate limiting.** Not configured in-app. If traffic ever matters, add Caddy's `rate_limit` plugin at the path.
 - **Concurrent writes.** `saturn analyze` writes non-atomically; viewer can land on a half-written file. The loader's JSON decode catches this and the index hides the row until the next request. No corrupted state.
 

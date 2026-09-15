@@ -1,12 +1,13 @@
 # saturn
 
-Dataset dissector. Point it at a HuggingFace repo, a local file, or a slice of either and it produces a terminal summary, a self-contained HTML report, and a machine-readable JSON findings file. Stats pass is always free and deterministic. Language-model insight and topic clustering are opt-in.
+Dataset dissector. Point it at a HuggingFace repo, a local file, or a slice of either and it produces a terminal summary, a self-contained HTML report, and a machine-readable JSON findings file. The statistics pass runs without a provider account. Language-model interpretation is optional; topic clustering is planned.
 
-Generic across domains: alt-text, Bluesky firehose, census tables, VQA annotations all work out of the box.
+Use it to inspect column types, missing values, repeated values, distributions, and differences between datasets.
 
-**Live demo:** [dr.eamer.dev/saturn](https://dr.eamer.dev/saturn). Drop a CSV/Parquet/XLSX file or paste a HuggingFace repo id, get a notebook-style reading with a plain-language summary, role-tagged columns, and downloadable `.ipynb`.
-
-Primary use case: [lukeslp/bluesky-alt-text](https://huggingface.co/datasets/lukeslp/bluesky-alt-text), 404,841 image descriptions, profiled in 46 s, compared across the curated/firehose split in 18 s.
+**Example reports:** [dr.eamer.dev/saturn](https://dr.eamer.dev/saturn).
+The repository's deployment notes describe that public path as a static archive,
+separate from the upload-capable viewer. Run your own viewer for interactive
+analysis; see [deployment boundaries](docs/DEPLOY.md).
 
 ## Workbench direction
 
@@ -16,36 +17,31 @@ modular Papers, Data, and Media workspaces. The current CLI and viewer ship
 today. Two validation spikes gate the desktop work. See the canonical
 [Saturn Workbench Plan](docs/product/SATURN_WORKBENCH.md).
 
-## How saturn differs from other profilers
+## Install from source
 
-| | saturn | ydata-profiling | sweetviz | dataprep |
-|---|---|---|---|---|
-| Default scan | **full corpus** (polars-native) | sample with cap | full corpus (pandas) | full corpus |
-| Bounded memory on wide text | **yes** (vocab caps, near-unique skip) | partial | partial | partial |
-| Compare mode | **pairwise + composite divergence score** | pairwise overlay | pairwise (its specialty) | no |
-| LLM-narrated reading | **yes, opt-in, catfish-critic** | no | no | no |
-| Per-column LLM role + treatment | **yes** | no | no | no |
-| JSON sidecar matching the HTML | **yes** | partial | no | no |
-| Notebook view (`?view=notebook`) | **yes** | no | no | no |
-| Real `.ipynb` export | **yes** (`/view/<id>.ipynb`) | no | no | no |
-| Live web viewer with upload form | **yes** (Flask, port 5043) | no | no | no |
-| WCAG 2.2 AA structural guards | **yes** (tested) | no | no | no |
-| Multilingual at scale | **yes** (fasttext lid.176, ~1M docs/s) | basic | basic | basic |
-
-The bold cells are the columns where saturn was built specifically. The deterministic stats pass is always free; the LLM pass is one extra flag and is the differentiator if you've ever asked yourself "what *is* this dataset, plain English."
-
-## Install
+Python 3.10 or later is required by the package metadata. From a checkout:
 
 ```bash
-python3.10 -m venv venv
-source venv/bin/activate
-pip install -e '.[nlp]'
-# optional, enables true full-corpus language detection:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+saturn version
+```
+
+The base install supports profiling and comparison. Add `.[web]` for the viewer,
+`.[llm]` for provider-backed interpretation, or `.[dev,web]` for the test suite.
+The `[nlp]` extra installs heavier optional libraries; installing it does not
+add the planned topic-clustering workflow.
+
+For the optional fastText language detector, install `.[nlp]` and download the
+separately licensed model:
+
+```bash
 mkdir -p .cache/saturn
 curl -sL -o .cache/saturn/lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
 ```
 
-Python 3.10+ required.
+Without that model, language detection uses a bounded `langdetect` sample.
 
 ## Use
 
@@ -107,29 +103,40 @@ failed runs remove temporary files and never partially replace an artifact.
 
 ## Viewer
 
+Start a local viewer with model interpretation disabled by default:
+
 ```bash
-pip install -e '.[web,llm]'
-export OPENAI_API_KEY='...'  # required for the default Luna workflow
-saturn serve --dir path/to/findings/ --port 5043
+pip install -e '.[web]'
+SATURN_DEFAULT_LLM='' saturn serve --dir path/to/findings/ --port 5043
 open http://127.0.0.1:5043
 ```
 
-A WCAG 2.2 AA compliant live alternative to the static HTML report. Drop findings JSON files into a directory; refreshing the index picks up new runs without restarting. `/api/findings/<id>` returns the raw JSON for scripting.
+The viewer reads findings from the selected directory. It also includes upload,
+Hugging Face analysis, notebook export, and model interpretation routes. Anyone
+who can reach an exposed viewer may be able to see its findings; localhost is
+the default binding. Read [docs/DEPLOY.md](docs/DEPLOY.md) before exposing it.
 
-Inject provider credentials through the service environment; never store them in the repository. Without `OPENAI_API_KEY`, the default `openai:gpt-5.6-luna` stage fails open and Saturn still returns the deterministic analysis without a model narrative.
+To enable provider calls, install `.[llm]`, select the provider, and configure
+credentials outside the repository. Without an override, the viewer selects
+`openai:gpt-5.6-luna`; an upload can request that model without a CLI `--llm`
+flag. The form's stats-only option disables the model stage for that request.
+Provider failures are recorded while deterministic analysis continues.
+
+The viewer has structural accessibility tests for landmarks, controls, and
+chart data tables. Those checks do not establish full WCAG conformance.
 
 ## Design
 
-- **Polars-native, full-corpus by default.** 404K rows of 21-column Bluesky data profiled in under a minute. Opt-in `--sample N` for quick peeks on anything bigger.
+- **Polars-native, full-corpus by default.** Use `--sample N` when loading the whole dataset would be too expensive.
 - **Bounded memory.** `duplicate_counter` and vocab expansion get skipped on JSON-blob-shaped columns; near-unique columns skip value-counts that would return 400K singletons; vocab tokenisation is capped to a 20K-row subsample truncated to 500 chars per row.
-- **fasttext lid.176** for true full-corpus language detection when the model is present (~1M docs/sec). Falls back to a bounded `langdetect` sample otherwise.
+- **fastText lid.176** for language detection when the model is present. Falls back to a bounded `langdetect` sample otherwise.
 - **Two passes.** A free deterministic stats pass (always runs) and an opt-in language-model insight pass (Phase 2, shipped).
 - **Schema inference** uses absolute *and* relative cardinality: a 489-value column in a 404K-row corpus is categorical, not text, even though 489 > the absolute threshold.
-- **Compare mode** is the dataset's feature. Diff two slices column-by-column; every delta (null drift, mean/length delta, entropy delta, top-value jaccard, language-mix jaccard) is both visible in the HTML and machine-readable in the JSON.
+- **Compare mode.** Diff two slices column-by-column; every delta (null drift, mean/length delta, entropy delta, top-value jaccard, language-mix jaccard) is both visible in the HTML and machine-readable in the JSON.
 
-## Real output
+## Historical example
 
-Running `saturn compare lukeslp/bluesky-alt-text --by source_mode` on the full 404,841-row corpus (12 to 18 s):
+A previously recorded run of `saturn compare lukeslp/bluesky-alt-text --by source_mode` used 404,841 rows and took 12 to 18 seconds. These are historical observations, not a benchmark for the current release or other machines:
 
 | signal | curated (279K) | firehose (125K) | Δ |
 |---|---|---|---|
@@ -139,7 +146,7 @@ Running `saturn compare lukeslp/bluesky-alt-text --by source_mode` on the full 4
 | `author_handle` null | 0% | 100% | **+100%** (firehose is anonymised) |
 | `cursor` duplicate rate | 75% | 17% | **−58pp** |
 
-The **+79 chars** on firehose vs curated was the non-obvious finding: the curated 489-account population writes *shorter* alt text than the broader stream. Worth a Concadia-style readability follow-up.
+In that run, the curated 489-account sample had shorter descriptions on average than the broader stream. This comparison alone does not establish a difference in readability.
 
 ## LLM insight pass (opt-in)
 
@@ -151,9 +158,13 @@ Install `pip install 'saturn-dissect[llm]'` and set the provider's standard API-
 
 ## Data handling
 
-The stats pass is entirely local. Nothing leaves your machine unless you pass `--llm`.
+For a local file analyzed with the CLI and no `--llm`, profiling runs on your
+machine. A Hugging Face source requires network access to retrieve data. The
+optional language-model stage sends evidence to the selected provider. A web
+upload transfers the file to the machine hosting the viewer, whose provider
+settings are separate from CLI defaults.
 
-When the insight pass runs, saturn sends a compact per-column projection to the provider you chose. That projection is the same surface a reader already sees in the JSON sidecar: row counts, null rates, distinct counts, numeric stats, the language mix, and by default the column's most frequent values and words. Saturn never sends raw rows, and it never sends a column's full contents. Each forwarded value is truncated to 200 bytes so one long-text column cannot balloon the request.
+When the insight pass runs, saturn sends a compact per-column projection to the provider you chose. That projection is the same surface a reader already sees in the JSON sidecar: row counts, null rates, distinct counts, numeric stats, the language mix, and by default the column's most frequent values and words. Saturn never sends raw rows, and it never sends a column's full contents. Long literal values are truncated to a 200-byte prefix plus an ellipsis.
 
 Those top values and words are still literal cell contents, so on a dataset with names, handles, free text, or anything else sensitive (PII/PHI under HIPAA, GDPR, or FERPA), they can carry identifying data. Two ways to withhold them:
 
@@ -165,20 +176,19 @@ saturn analyze data.csv --llm anthropic --no-evidence-values
 export SATURN_REDACT_EVIDENCE_VALUES=1
 ```
 
-With redaction on, counts, stats, and the language mix still go to the model; only the verbatim values and words are held back.
+With redaction on, counts, stats, and the language mix still go to the model; literal values and words are held back. Column names and source identifiers remain in the evidence and may also be sensitive.
 
-The destination is whichever provider you name in `--llm`: anthropic, openai, groq, gemini, mistral, cohere, xai, perplexity, huggingface, or a local ollama (which keeps everything on `localhost:11434`).
+The destination is the provider selected by the CLI flag or viewer settings. Ollama normally uses a local endpoint, but a configured remote endpoint changes that boundary.
 
-Language detection is local in every mode. When the fastText `lid.176` model is present, saturn uses it and stamps a CC-BY-SA-3.0 attribution into the report footer and the JSON sidecar (`attributions` key), because language counts produced by `lid.176` are a derivative work. See [NOTICE](NOTICE).
+Language detection runs on the machine performing the analysis, including the server when using a hosted viewer. When the fastText `lid.176` model is present, saturn uses it and stamps a CC-BY-SA-3.0 attribution into the report footer and the JSON sidecar (`attributions` key), to preserve model provenance. The model license does not, by itself, establish that every derived statistic inherits that license. See [NOTICE](NOTICE).
 
-## Status
+## Implemented features
 
-All shipping:
 - Stats pass (Phase 1): full-corpus polars profiling, HTML + JSON output
 - LLM insight pass (Phase 2): `--llm provider[:model]`, catfish critic on a second `--llm`, all commands
 - Compare-mode insights (Phase 2.5): pair evidence, delta-aware prompts
 - Compare mode (Phase 4): composite divergence score, streaming fallback
-- Flask viewer (Phase 5): `saturn serve --port 5043`, drop-zone upload, HF analysis, WCAG 2.2 AA
+- Flask viewer (Phase 5): `saturn serve --port 5043`, drop-zone upload, HF analysis, structural accessibility tests
 - Notebook view: `?view=notebook` toggle with cell gutters + inline plots
 - `.ipynb` export: `/view/<id>.ipynb` returns valid nbformat, matplotlib plots per column
 - LLM-curated columns (prompt v2): per-column `role` and `treatment` chips, dataset-level `featured_charts`
@@ -194,4 +204,15 @@ On the roadmap: Phase 3 (BERTopic clustering via `[nlp]` extra), SSE progress fo
 
 MIT. © Luke Steuber. Full text in [LICENSE](LICENSE).
 
-Third-party dependency attributions are in [NOTICE](NOTICE). One runtime asset carries its own terms: the optional fastText `lid.176` language model is CC-BY-SA-3.0, so any report whose language counts came from it is a derivative work for those figures and carries that license (stamped into the report footer and the JSON `attributions` key).
+Third-party dependency attributions are in [NOTICE](NOTICE). The optional fastText `lid.176` model is distributed under CC BY-SA 3.0. Saturn includes model attribution in affected reports and JSON findings. That attribution does not change the license of your input dataset.
+
+## Tests
+
+```bash
+pip install -e '.[dev,web]'
+SATURN_NO_NETWORK=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 pytest
+```
+
+The suite uses synthetic rows when no local alt-text fixture is present and
+mocks provider calls. It checks software behavior, not the accuracy of an
+external dataset or a complete accessibility certification.

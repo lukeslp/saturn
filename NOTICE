@@ -4,9 +4,9 @@ Licensed under the MIT License (see LICENSE).
 
 This product includes third-party open-source software. The components below
 are dependencies of saturn; each remains under its own license, and the
-copyright stays with its respective authors. This NOTICE satisfies the
-attribution requirements of the permissive licenses (Apache-2.0, BSD, MIT,
-MPL, PSF) under which they are distributed.
+copyright stays with its respective authors. This inventory is a reference,
+not a substitute for the license and notice files distributed with each
+installed dependency.
 
 To regenerate the dependency inventory:
 
@@ -21,13 +21,12 @@ Data / model assets (attribution required at report time)
 fastText lid.176 language identification model
   License: CC-BY-SA-3.0
   https://fasttext.cc/docs/en/language-identification.html
-  Saturn downloads and runs this model only when present in the cache (the
-  optional language-detection upgrade). Any saturn report whose language counts
-  were produced by lid.176 is a derivative work for those figures and carries
-  the same CC-BY-SA-3.0 license. Saturn stamps that attribution into the report
-  footer and into an "attributions" key in the JSON findings sidecar whenever
-  the fastText engine ran. Reports that fall back to langdetect (Apache-2.0)
-  carry no such obligation.
+  Saturn runs this optional model when it is present in the configured cache.
+  See the upstream model page for its distribution terms. Saturn records the
+  model attribution in the report footer and JSON findings whenever the
+  fastText engine runs. This preserves provenance; it is not a determination
+  that every reported statistic is a derivative work or a relicensing of the
+  input dataset. Reports using langdetect do not add a fastText attribution.
 
 
 ================================================================================
@@ -68,7 +67,7 @@ ISC License
 
 
 ================================================================================
-Weak-copyleft component (disjunctive license; used under the permissive option)
+Weak-copyleft component (disjunctive license)
 ================================================================================
 
 pyphen
