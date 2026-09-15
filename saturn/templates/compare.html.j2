@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>saturn compare — {{ report.a.label }} vs {{ report.b.label }}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>{{ plotly_js | safe }}</script>
 <style>
   :root { --bg:#ffffff; --fg:#14161a; --muted:#5b6472; --panel:#f7f7f9; --accent-a:#2d5cf6; --accent-b:#8b5cf6; --warn:#b45309; --error:#b91c1c; --ok:#047857; --positive:#047857; --negative:#b91c1c; }
   html, body { background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif; margin: 0; line-height: 1.5; }

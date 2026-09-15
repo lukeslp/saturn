@@ -127,7 +127,7 @@ Expected: a JSON object containing `"status":"ok"` and the active `deployment_co
 - **Path-traversal guard.** `_safe_findings_path` in `saturn/viewer/app.py` resolves every `<id>` against the configured findings dir and 404s anything that escapes. Belt and suspenders; Flask's default string converter already forbids `/`.
 - **Findings can contain personal data.** Counts and rates are aggregates, but `top_values` and frequent words can reproduce names, handles, or free text. Source paths and column names may also be sensitive. Treat access to the findings directory as access to the data it reveals; do not expose private findings through a public viewer.
 - **Rate limiting.** Not configured in-app. If traffic ever matters, add Caddy's `rate_limit` plugin at the path.
-- **Concurrent writes.** `saturn analyze` writes non-atomically; viewer can land on a half-written file. The loader's JSON decode catches this and the index hides the row until the next request. No corrupted state.
+- **Concurrent writes.** Findings JSON is written to a temporary file and atomically replaced. HTML exports use a separate write path. The viewer skips an unreadable JSON finding while loading the index.
 
 ## Verification
 

@@ -9,7 +9,7 @@ The repository's deployment notes describe that public path as a static archive,
 separate from the upload-capable viewer. Run your own viewer for interactive
 analysis; see [deployment boundaries](docs/DEPLOY.md).
 
-## Workbench direction
+## Planned workbench
 
 The recommended product direction extends Saturn into a native macOS research
 workbench with a menu-bar Drop Shelf, local and remote dataset connectors, and
@@ -44,6 +44,10 @@ curl -sL -o .cache/saturn/lid.176.bin https://dl.fbaipublicfiles.com/fasttext/su
 Without that model, language detection uses a bounded `langdetect` sample.
 
 ## Use
+
+A `--llm` option sends profile evidence to the selected provider; by default that
+evidence includes frequent cell values and words. See [Data handling](#data-handling)
+for redaction and the separate viewer defaults.
 
 ```bash
 # Full-corpus profile of a HuggingFace dataset

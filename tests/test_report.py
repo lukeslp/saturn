@@ -36,7 +36,7 @@ def test_end_to_end_report(tmp_path: Path, tiny_synthetic):
     assert "image_alt_length" in html
     assert "alt_text" in html
     assert "author_handle" in html
-    # plotly CDN injected via template
+    # Plotly is embedded in the standalone template
     assert "plotly" in html.lower()
     # WCAG 2.2 AA: every Plotly figure ships a <details>Show data table</details>
     # companion in the standalone export, not just the live viewer.

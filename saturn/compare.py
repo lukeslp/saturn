@@ -81,8 +81,8 @@ class CompareReport:
     def attributions(self) -> list[dict[str, str]]:
         """Third-party attributions required by this comparison's provenance.
 
-        fastText lid.176 is CC-BY-SA-3.0; a comparison whose language counts came
-        from it is a derivative work for those figures.
+        fastText lid.176 is CC-BY-SA-3.0. Preserve the model provenance
+        without asserting that model output inherits the model license.
         """
         items: list[dict[str, str]] = []
         if self.used_fasttext():
@@ -93,9 +93,8 @@ class CompareReport:
                     "url": "https://fasttext.cc/docs/en/language-identification.html",
                     "note": (
                         "Language counts in this comparison were produced with the "
-                        "fastText lid.176 model, licensed CC-BY-SA-3.0. The report is "
-                        "a derivative work and carries the same license for those "
-                        "figures."
+                        "fastText lid.176 model, licensed CC-BY-SA-3.0. "
+                        "This attribution identifies the model used."
                     ),
                 }
             )

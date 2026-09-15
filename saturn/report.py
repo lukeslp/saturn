@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from plotly.offline import get_plotlyjs
 
 from . import __version__
 from .charts import (
@@ -73,8 +74,8 @@ class ReportData:
     def attributions(self) -> list[dict[str, str]]:
         """Third-party attributions required by this specific report's provenance.
 
-        fastText lid.176 is licensed CC-BY-SA-3.0, so any report whose language
-        counts were produced by it is a derivative work and must carry the notice.
+        fastText lid.176 is licensed CC-BY-SA-3.0. Preserve its provenance
+        without asserting that model output inherits the model license.
         Reports that fell back to langdetect (Apache-2.0) need no entry here.
         """
         items: list[dict[str, str]] = []
@@ -86,9 +87,8 @@ class ReportData:
                     "url": "https://fasttext.cc/docs/en/language-identification.html",
                     "note": (
                         "Language counts in this report were produced with the "
-                        "fastText lid.176 model, licensed CC-BY-SA-3.0. This report "
-                        "is a derivative work and carries the same license for those "
-                        "figures."
+                        "fastText lid.176 model, licensed CC-BY-SA-3.0. "
+                        "This attribution identifies the model used."
                     ),
                 }
             )
@@ -348,6 +348,7 @@ def render_html(data: ReportData, output_path: Path) -> Path:
         language_table=language_table,
         correlation_table=correlation_table,
         version=__version__,
+        plotly_js=get_plotlyjs(),
     )
     output_path.write_text(html, encoding="utf-8")
     return output_path
@@ -380,7 +381,7 @@ def render_compare_html(report, output_path: Path) -> Path:
                 if fig:
                     charts[c.column] = fig
 
-    html = tmpl.render(report=report, charts=charts, version=__version__)
+    html = tmpl.render(report=report, charts=charts, version=__version__, plotly_js=get_plotlyjs())
     output_path.write_text(html, encoding="utf-8")
     return output_path
 
